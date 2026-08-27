@@ -1,0 +1,67 @@
+# dependencies
+node_modules/
+
+# build output
+out/
+dist/
+release/
+
+# logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# environment
+.env
+.env.*
+!.env.example
+
+# editor / OS
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Electron / Vite cache
+.vite/
+.cache/
+
+# 실제 Excel 업무 데이터
+*.xlsx
+*.xlsm
+*.xls
+
+# Git에 포함할 Excel 템플릿만 예외
+!templates/
+!templates/*.xlsx
+!templates/*.xlsm
+
+# 로컬 업무 데이터 폴더
+local-data/
+data/
+backup/
+export/
+
+# 임시 / 복구 파일
+*.tmp
+*.tmp.xlsx
+*.temp.xlsx
+*.bak
+*.backup
+
+# 설치 / 패키징 산출물
+*.exe
+*.msi
+*.dmg
+*.AppImage
+
+# 테스트용 임시 파일
+test-output/
+temp/
+tmp/
