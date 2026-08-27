@@ -5,7 +5,8 @@ import { electronAPI } from '@electron-toolkit/preload'
 const inventoryApi = {
   getItems: () => ipcRenderer.invoke('items:get'),
   createDataFile: () => ipcRenderer.invoke('data-file:create'),
-  importLegacyMasterData: () => ipcRenderer.invoke('legacy-master-data:import')
+  importLegacyMasterData: () => ipcRenderer.invoke('legacy-master-data:import'),
+  importLegacyTransactions: () => ipcRenderer.invoke('legacy-transactions:import')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

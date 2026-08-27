@@ -5,6 +5,7 @@ function App() {
   const [errorMessage, setErrorMessage] = useState('')
   const [createResultMessage, setCreateResultMessage] = useState('')
   const [importResultMessage, setImportResultMessage] = useState('')
+  const [transactionImportResultMessage, setTransactionImportResultMessage] = useState('')
 
   const loadItems = useCallback(() => {
     window.inventoryApi
@@ -53,6 +54,39 @@ function App() {
       })
   }
 
+  const handleImportLegacyTransactions = () => {
+    setTransactionImportResultMessage('')
+
+    window.inventoryApi
+      .importLegacyTransactions()
+      .then((result) => {
+        const missingItemCount = result.missingItemCodes.length
+        const missingClientCount = result.missingClientCodes.length
+        const typeCounts = result.transactionTypeCounts
+        const missingSummary = [
+          missingItemCount > 0 ? `현재 품목 목록에 없는 코드 ${missingItemCount}개` : '',
+          missingClientCount > 0 ? `현재 거래처 목록에 없는 코드 ${missingClientCount}개` : ''
+        ]
+          .filter(Boolean)
+          .join(' / ')
+
+        setTransactionImportResultMessage(
+          [
+            `기존 입출고내역을 가져왔습니다. 총 ${result.transactionCount}건`,
+            `입고 ${typeCounts['입고']} / 출고 ${typeCounts['출고']} / 출고반입 ${typeCounts['출고반입']}`,
+            `출고반입 수량 정규화 ${result.normalizedReturnCount}건`,
+            missingSummary
+          ]
+            .filter(Boolean)
+            .join(' ')
+        )
+      })
+      .catch((error) => {
+        console.error(error)
+        setTransactionImportResultMessage('기존 입출고내역을 가져오지 못했습니다.')
+      })
+  }
+
   return (
     <main>
       <h1>품목 목록</h1>
@@ -67,6 +101,11 @@ function App() {
         기존 데이터 가져오기 테스트
       </button>
       {importResultMessage && <p>{importResultMessage}</p>}
+
+      <button type="button" onClick={handleImportLegacyTransactions}>
+        기존 입출고내역 가져오기 테스트
+      </button>
+      {transactionImportResultMessage && <p>{transactionImportResultMessage}</p>}
 
       {errorMessage && <p>{errorMessage}</p>}
 
