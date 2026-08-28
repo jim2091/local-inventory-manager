@@ -155,6 +155,169 @@ function readItemsFromExcel() {
     .filter((item) => item.code || item.name)
 }
 
+function readTransactionsFromExcel() {
+  const dataFilePath = getLocalDataFilePath(dataFileName)
+
+  if (!existsSync(dataFilePath)) {
+    throw new Error('재고관리 데이터 파일이 없습니다.')
+  }
+
+  const workbook = XLSX.readFile(dataFilePath, {
+    cellDates: true
+  })
+
+  const rows = readSheetRows(
+    workbook,
+    '입출고내역'
+  )
+
+  return rows
+    .map((row) => {
+      const dateValue = row['일자']
+
+      let date = ''
+
+      if (
+        dateValue instanceof Date &&
+        !Number.isNaN(dateValue.getTime())
+      ) {
+        const year = dateValue.getFullYear()
+        const month = String(
+          dateValue.getMonth() + 1
+        ).padStart(2, '0')
+        const day = String(
+          dateValue.getDate()
+        ).padStart(2, '0')
+
+        date = `${year}-${month}-${day}`
+      } else if (dateValue) {
+        date = String(dateValue)
+      }
+
+      return {
+        transactionNo:
+          row['거래번호'] ?? '',
+
+        date,
+
+        type:
+          row['구분'] ?? '',
+
+        clientCode:
+          row['거래처코드'] ?? '',
+
+        clientName:
+          row['거래처명'] ?? '',
+
+        itemCode:
+          row['품목코드'] ?? '',
+
+        itemName:
+          row['품목명'] ?? '',
+
+        quantity:
+          row['수량'] ?? '',
+
+        unitPrice:
+          row['단가'] ?? '',
+
+        supplyAmount:
+          row['공급가액'] ?? '',
+
+        vat:
+          row['부가세'] ?? '',
+
+        totalAmount:
+          row['합계'] ?? '',
+
+        canceled:
+          row['취소여부'] ?? 'N',
+
+        canceledAt:
+          row['취소일시'] ?? '',
+
+        cancelReason:
+          row['취소사유'] ?? ''
+      }
+    })
+    .filter(
+      (transaction) =>
+        transaction.transactionNo !== ''
+    )
+    .sort(
+      (a, b) =>
+        Number(b.transactionNo) -
+        Number(a.transactionNo)
+    )
+}
+
+function addItem(item) {
+  const dataFilePath = getLocalDataFilePath(dataFileName)
+
+  if (!existsSync(dataFilePath)) {
+    throw new Error('재고관리 데이터 파일이 없습니다.')
+  }
+
+  const workbook = XLSX.readFile(dataFilePath, { cellDates: true })
+  const rows = readSheetRows(workbook, '품목')
+
+  const code = normalizeCode(item.code)
+  const name = String(item.name ?? '').trim()
+
+  if (!code) {
+    throw new Error('품목 코드를 입력해주세요.')
+  }
+
+  if (!name) {
+    throw new Error('품목명을 입력해주세요.')
+  }
+
+  const duplicate = rows.some((row) => normalizeCode(row['코드']) === code)
+
+  if (duplicate) {
+    throw new Error(`이미 존재하는 품목 코드입니다: ${code}`)
+  }
+
+  const newItem = [
+    String(item.type ?? '').trim(),
+    code,
+    name,
+    item.initialPrice ?? '',
+    item.purchasePrice ?? '',
+    item.salesPrice ?? '',
+    item.initialStock ?? '',
+    item.currentStock ?? '',
+    String(item.unit ?? '').trim(),
+    String(item.spec ?? '').trim(),
+    String(item.brand ?? '').trim()
+  ]
+
+  const existingRows = rows.map((row) =>
+    workbookHeaders['품목'].map((header) => row[header] ?? '')
+  )
+
+  replaceSheet(workbook, '품목', workbookHeaders['품목'], [...existingRows, newItem])
+
+  saveWorkbookSafely(workbook, dataFilePath)
+
+  return {
+    success: true,
+    item: {
+      type: newItem[0],
+      code: newItem[1],
+      name: newItem[2],
+      initialPrice: newItem[3],
+      purchasePrice: newItem[4],
+      salesPrice: newItem[5],
+      initialStock: newItem[6],
+      currentStock: newItem[7],
+      unit: newItem[8],
+      spec: newItem[9],
+      brand: newItem[10]
+    }
+  }
+}
+
 function createDataFile() {
   const filePath = getLocalDataFilePath(dataFileName)
 
@@ -470,6 +633,1051 @@ function importLegacyTransactions() {
   }
 }
 
+function updateItem(originalCode, item) {
+  const dataFilePath = getLocalDataFilePath(dataFileName)
+
+  if (!existsSync(dataFilePath)) {
+    throw new Error('재고관리 데이터 파일이 없습니다.')
+  }
+
+  const workbook = XLSX.readFile(dataFilePath, { cellDates: true })
+  const itemRows = readSheetRows(workbook, '품목')
+
+  const oldCode = normalizeCode(originalCode)
+  const newCode = normalizeCode(item.code)
+  const name = String(item.name ?? '').trim()
+
+  if (!oldCode) {
+    throw new Error('수정할 품목 코드가 없습니다.')
+  }
+
+  if (!newCode) {
+    throw new Error('품목 코드를 입력해주세요.')
+  }
+
+  if (!name) {
+    throw new Error('품목명을 입력해주세요.')
+  }
+
+  const targetIndex = itemRows.findIndex(
+    (row) => normalizeCode(row['코드']) === oldCode
+  )
+
+  if (targetIndex < 0) {
+    throw new Error(`수정할 품목을 찾을 수 없습니다: ${oldCode}`)
+  }
+
+  const transactionRows = readSheetRows(workbook, '입출고내역')
+
+  const usedInTransaction = transactionRows.some(
+    (row) => normalizeCode(row['품목코드']) === oldCode
+  )
+
+  if (usedInTransaction && oldCode !== newCode) {
+    throw new Error(
+      '입출고내역에 사용된 품목은 코드를 변경할 수 없습니다.'
+    )
+  }
+
+  const duplicate = itemRows.some(
+    (row, index) =>
+      index !== targetIndex &&
+      normalizeCode(row['코드']) === newCode
+  )
+
+  if (duplicate) {
+    throw new Error(`이미 존재하는 품목 코드입니다: ${newCode}`)
+  }
+
+  itemRows[targetIndex] = {
+    구분: String(item.type ?? '').trim(),
+    코드: newCode,
+    품목명: name,
+    기초재고단가: item.initialPrice ?? '',
+    매입단가: item.purchasePrice ?? '',
+    매출단가: item.salesPrice ?? '',
+    기초재고량: item.initialStock ?? '',
+    현재재고량: item.currentStock ?? '',
+    단위: String(item.unit ?? '').trim(),
+    규격: String(item.spec ?? '').trim(),
+    브랜드명: String(item.brand ?? '').trim()
+  }
+
+  const rows = itemRows.map((row) =>
+    workbookHeaders['품목'].map((header) => row[header] ?? '')
+  )
+
+  replaceSheet(workbook, '품목', workbookHeaders['품목'], rows)
+
+  saveWorkbookSafely(workbook, dataFilePath)
+
+  return {
+    success: true,
+    item: {
+      type: itemRows[targetIndex]['구분'],
+      code: itemRows[targetIndex]['코드'],
+      name: itemRows[targetIndex]['품목명'],
+      initialPrice: itemRows[targetIndex]['기초재고단가'],
+      purchasePrice: itemRows[targetIndex]['매입단가'],
+      salesPrice: itemRows[targetIndex]['매출단가'],
+      initialStock: itemRows[targetIndex]['기초재고량'],
+      currentStock: itemRows[targetIndex]['현재재고량'],
+      unit: itemRows[targetIndex]['단위'],
+      spec: itemRows[targetIndex]['규격'],
+      brand: itemRows[targetIndex]['브랜드명']
+    }
+  }
+}
+
+function deleteItem(code) {
+  const dataFilePath = getLocalDataFilePath(dataFileName)
+
+  if (!existsSync(dataFilePath)) {
+    throw new Error('재고관리 데이터 파일이 없습니다.')
+  }
+
+  const workbook = XLSX.readFile(dataFilePath, { cellDates: true })
+  const itemRows = readSheetRows(workbook, '품목')
+
+  const targetCode = normalizeCode(code)
+
+  if (!targetCode) {
+    throw new Error('삭제할 품목 코드가 없습니다.')
+  }
+
+  const targetIndex = itemRows.findIndex(
+    (row) => normalizeCode(row['코드']) === targetCode
+  )
+
+  if (targetIndex < 0) {
+    throw new Error(`삭제할 품목을 찾을 수 없습니다: ${targetCode}`)
+  }
+
+  const transactionRows = readSheetRows(workbook, '입출고내역')
+
+  const usedInTransaction = transactionRows.some(
+    (row) => normalizeCode(row['품목코드']) === targetCode
+  )
+
+  if (usedInTransaction) {
+    throw new Error(
+      '입출고내역에 사용된 품목은 삭제할 수 없습니다.'
+    )
+  }
+
+  itemRows.splice(targetIndex, 1)
+
+  const rows = itemRows.map((row) =>
+    workbookHeaders['품목'].map((header) => row[header] ?? '')
+  )
+
+  replaceSheet(
+    workbook,
+    '품목',
+    workbookHeaders['품목'],
+    rows
+  )
+
+  saveWorkbookSafely(workbook, dataFilePath)
+
+  return {
+    success: true,
+    code: targetCode
+  }
+}
+
+function getClientSheetName(clientType) {
+  if (clientType === 'sales') {
+    return '매출거래처'
+  }
+
+  if (clientType === 'purchase') {
+    return '매입거래처'
+  }
+
+  throw new Error('올바르지 않은 거래처 구분입니다.')
+}
+
+function readClientsFromExcel(clientType) {
+  const dataFilePath = getLocalDataFilePath(dataFileName)
+
+  if (!existsSync(dataFilePath)) {
+    throw new Error('재고관리 데이터 파일이 없습니다.')
+  }
+
+  const workbook = XLSX.readFile(dataFilePath, { cellDates: true })
+  const sheetName = getClientSheetName(clientType)
+  const rows = readSheetRows(workbook, sheetName)
+
+  return rows
+    .map((row) => ({
+      code: normalizeCode(row['코드']),
+      name: String(row['거래처명'] ?? '').trim()
+    }))
+    .filter((client) => client.code || client.name)
+}
+
+function addClient(clientType, client) {
+  const dataFilePath = getLocalDataFilePath(dataFileName)
+
+  if (!existsSync(dataFilePath)) {
+    throw new Error('재고관리 데이터 파일이 없습니다.')
+  }
+
+  const workbook = XLSX.readFile(dataFilePath, { cellDates: true })
+  const sheetName = getClientSheetName(clientType)
+  const rows = readSheetRows(workbook, sheetName)
+
+  const code = normalizeCode(client.code)
+  const name = String(client.name ?? '').trim()
+
+  if (!code) {
+    throw new Error('거래처 코드를 입력해주세요.')
+  }
+
+  if (!name) {
+    throw new Error('거래처명을 입력해주세요.')
+  }
+
+  const duplicate = rows.some(
+    (row) => normalizeCode(row['코드']) === code
+  )
+
+  if (duplicate) {
+    throw new Error(`이미 존재하는 거래처 코드입니다: ${code}`)
+  }
+
+  const newRows = [
+    ...rows.map((row) => [
+      row['코드'] ?? '',
+      row['거래처명'] ?? ''
+    ]),
+    [code, name]
+  ]
+
+  replaceSheet(
+    workbook,
+    sheetName,
+    workbookHeaders[sheetName],
+    newRows
+  )
+
+  saveWorkbookSafely(workbook, dataFilePath)
+
+  return {
+    success: true,
+    client: {
+      code,
+      name
+    }
+  }
+}
+
+function isClientUsedInTransaction(transactionRows, clientType, code) {
+  return transactionRows.some((row) => {
+    const transactionClientCode = normalizeCode(row['거래처코드'])
+    const transactionType = String(row['구분'] ?? '').trim()
+
+    if (transactionClientCode !== code) {
+      return false
+    }
+
+    if (clientType === 'sales') {
+      return transactionType === '출고' || transactionType === '출고반입'
+    }
+
+    if (clientType === 'purchase') {
+      return transactionType === '입고'
+    }
+
+    return false
+  })
+}
+
+function updateClient(clientType, originalCode, client) {
+  const dataFilePath = getLocalDataFilePath(dataFileName)
+
+  if (!existsSync(dataFilePath)) {
+    throw new Error('재고관리 데이터 파일이 없습니다.')
+  }
+
+  const workbook = XLSX.readFile(dataFilePath, { cellDates: true })
+  const sheetName = getClientSheetName(clientType)
+  const rows = readSheetRows(workbook, sheetName)
+
+  const oldCode = normalizeCode(originalCode)
+  const newCode = normalizeCode(client.code)
+  const name = String(client.name ?? '').trim()
+
+  if (!oldCode) {
+    throw new Error('수정할 거래처 코드가 없습니다.')
+  }
+
+  if (!newCode) {
+    throw new Error('거래처 코드를 입력해주세요.')
+  }
+
+  if (!name) {
+    throw new Error('거래처명을 입력해주세요.')
+  }
+
+  const targetIndex = rows.findIndex(
+    (row) => normalizeCode(row['코드']) === oldCode
+  )
+
+  if (targetIndex < 0) {
+    throw new Error(`수정할 거래처를 찾을 수 없습니다: ${oldCode}`)
+  }
+
+  const transactionRows = readSheetRows(workbook, '입출고내역')
+
+  const usedInTransaction = isClientUsedInTransaction(
+    transactionRows,
+    clientType,
+    oldCode
+  )
+
+  if (usedInTransaction && oldCode !== newCode) {
+    throw new Error(
+      '입출고내역에 사용된 거래처는 코드를 변경할 수 없습니다.'
+    )
+  }
+
+  const duplicate = rows.some(
+    (row, index) =>
+      index !== targetIndex &&
+      normalizeCode(row['코드']) === newCode
+  )
+
+  if (duplicate) {
+    throw new Error(`이미 존재하는 거래처 코드입니다: ${newCode}`)
+  }
+
+  rows[targetIndex] = {
+    코드: newCode,
+    거래처명: name
+  }
+
+  const newRows = rows.map((row) => [
+    row['코드'] ?? '',
+    row['거래처명'] ?? ''
+  ])
+
+  replaceSheet(
+    workbook,
+    sheetName,
+    workbookHeaders[sheetName],
+    newRows
+  )
+
+  saveWorkbookSafely(workbook, dataFilePath)
+
+  return {
+    success: true,
+    client: {
+      code: newCode,
+      name
+    }
+  }
+}
+
+function deleteClient(clientType, code) {
+  const dataFilePath = getLocalDataFilePath(dataFileName)
+
+  if (!existsSync(dataFilePath)) {
+    throw new Error('재고관리 데이터 파일이 없습니다.')
+  }
+
+  const workbook = XLSX.readFile(dataFilePath, { cellDates: true })
+  const sheetName = getClientSheetName(clientType)
+  const rows = readSheetRows(workbook, sheetName)
+
+  const targetCode = normalizeCode(code)
+
+  if (!targetCode) {
+    throw new Error('삭제할 거래처 코드가 없습니다.')
+  }
+
+  const targetIndex = rows.findIndex(
+    (row) => normalizeCode(row['코드']) === targetCode
+  )
+
+  if (targetIndex < 0) {
+    throw new Error(`삭제할 거래처를 찾을 수 없습니다: ${targetCode}`)
+  }
+
+  const transactionRows = readSheetRows(workbook, '입출고내역')
+
+  const usedInTransaction = isClientUsedInTransaction(
+    transactionRows,
+    clientType,
+    targetCode
+  )
+
+  if (usedInTransaction) {
+    throw new Error(
+      '입출고내역에 사용된 거래처는 삭제할 수 없습니다.'
+    )
+  }
+
+  rows.splice(targetIndex, 1)
+
+  const newRows = rows.map((row) => [
+    row['코드'] ?? '',
+    row['거래처명'] ?? ''
+  ])
+
+  replaceSheet(
+    workbook,
+    sheetName,
+    workbookHeaders[sheetName],
+    newRows
+  )
+
+  saveWorkbookSafely(workbook, dataFilePath)
+
+  return {
+    success: true,
+    code: targetCode
+  }
+}
+
+function getNextTransactionNo(transactionRows) {
+  let maxTransactionNo = 0
+
+  for (const row of transactionRows) {
+    const transactionNo = Number(row['거래번호'])
+
+    if (Number.isFinite(transactionNo)) {
+      maxTransactionNo = Math.max(maxTransactionNo, transactionNo)
+    }
+  }
+
+  return maxTransactionNo + 1
+}
+
+function parsePositiveNumber(value, fieldName) {
+  const numberValue = Number(value)
+
+  if (!Number.isFinite(numberValue) || numberValue <= 0) {
+    throw new Error(`${fieldName}은(는) 0보다 큰 숫자여야 합니다.`)
+  }
+
+  return numberValue
+}
+
+function parseNonNegativeNumber(value, fieldName) {
+  const numberValue = Number(value)
+
+  if (!Number.isFinite(numberValue) || numberValue < 0) {
+    throw new Error(`${fieldName}은(는) 0 이상의 숫자여야 합니다.`)
+  }
+
+  return numberValue
+}
+
+function parseTransactionDate(value) {
+  if (!value) {
+    throw new Error('거래 일자를 입력해주세요.')
+  }
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+
+    if (match) {
+      const year = Number(match[1])
+      const month = Number(match[2])
+      const day = Number(match[3])
+
+      const date = new Date(year, month - 1, day)
+
+      if (
+        date.getFullYear() === year &&
+        date.getMonth() === month - 1 &&
+        date.getDate() === day
+      ) {
+        return date
+      }
+    }
+  }
+
+  throw new Error('거래 일자가 올바르지 않습니다.')
+}
+
+function addTransaction(transaction) {
+  const dataFilePath = getLocalDataFilePath(dataFileName)
+
+  if (!existsSync(dataFilePath)) {
+    throw new Error('재고관리 데이터 파일이 없습니다.')
+  }
+
+  const workbook = XLSX.readFile(dataFilePath, {
+    cellDates: true
+  })
+
+  const transactionRows = readSheetRows(
+    workbook,
+    '입출고내역'
+  )
+
+  const itemRows = readSheetRows(
+    workbook,
+    '품목'
+  )
+
+  const transactionType =
+    String(transaction.type ?? '').trim()
+
+  if (!allowedTransactionTypes.includes(transactionType)) {
+    throw new Error('올바른 입출고 구분을 선택해주세요.')
+  }
+
+  const itemCode = normalizeCode(transaction.itemCode)
+
+  if (!itemCode) {
+    throw new Error('품목을 선택해주세요.')
+  }
+
+  const itemIndex = itemRows.findIndex(
+    (row) =>
+      normalizeCode(row['코드']) === itemCode
+  )
+
+  if (itemIndex < 0) {
+    throw new Error(
+      `품목을 찾을 수 없습니다: ${itemCode}`
+    )
+  }
+
+  const item = itemRows[itemIndex]
+
+  const clientCode =
+    normalizeCode(transaction.clientCode)
+
+  if (!clientCode) {
+    throw new Error('거래처를 선택해주세요.')
+  }
+
+  const clientSheetName =
+    transactionType === '입고'
+      ? '매입거래처'
+      : '매출거래처'
+
+  const clientRows =
+    readSheetRows(workbook, clientSheetName)
+
+  const client = clientRows.find(
+    (row) =>
+      normalizeCode(row['코드']) === clientCode
+  )
+
+  if (!client) {
+    throw new Error(
+      `거래처를 찾을 수 없습니다: ${clientCode}`
+    )
+  }
+
+  const quantity = parsePositiveNumber(
+    transaction.quantity,
+    '수량'
+  )
+
+  const unitPrice = parseNonNegativeNumber(
+    transaction.unitPrice,
+    '단가'
+  )
+
+  const transactionDate =
+    parseTransactionDate(transaction.date)
+
+  const currentStockValue =
+    item['현재재고량'] === ''
+      ? 0
+      : Number(item['현재재고량'])
+
+  if (!Number.isFinite(currentStockValue)) {
+    throw new Error(
+      `${itemCode} 품목의 현재재고량이 올바르지 않습니다.`
+    )
+  }
+
+  let newStock = currentStockValue
+
+  if (
+    transactionType === '입고' ||
+    transactionType === '출고반입'
+  ) {
+    newStock += quantity
+  } else if (transactionType === '출고') {
+    newStock -= quantity
+  }
+
+  const supplyAmount =
+    quantity * unitPrice
+
+  const vat =
+    Math.round(supplyAmount * 0.1)
+
+  const totalAmount =
+    supplyAmount + vat
+
+  const transactionNo =
+    getNextTransactionNo(transactionRows)
+
+  const newTransaction = {
+    거래번호: transactionNo,
+    일자: transactionDate,
+    구분: transactionType,
+    거래처코드: clientCode,
+    거래처명: client['거래처명'] ?? '',
+    품목코드: itemCode,
+    품목명: item['품목명'] ?? '',
+    수량: quantity,
+    단가: unitPrice,
+    공급가액: supplyAmount,
+    부가세: vat,
+    합계: totalAmount,
+    취소여부: 'N',
+    취소일시: '',
+    취소사유: ''
+  }
+
+  const newTransactionRows = [
+    ...transactionRows.map((row) =>
+      workbookHeaders['입출고내역'].map(
+        (header) => row[header] ?? ''
+      )
+    ),
+    workbookHeaders['입출고내역'].map(
+      (header) => newTransaction[header] ?? ''
+    )
+  ]
+
+  itemRows[itemIndex] = {
+    ...itemRows[itemIndex],
+    현재재고량: newStock
+  }
+
+  const newItemRows =
+    itemRows.map((row) =>
+      workbookHeaders['품목'].map(
+        (header) => row[header] ?? ''
+      )
+    )
+
+  replaceSheet(
+    workbook,
+    '입출고내역',
+    workbookHeaders['입출고내역'],
+    newTransactionRows
+  )
+
+  replaceSheet(
+    workbook,
+    '품목',
+    workbookHeaders['품목'],
+    newItemRows
+  )
+
+  formatDateSheet(
+    workbook.Sheets['입출고내역']
+  )
+
+  saveWorkbookSafely(
+    workbook,
+    dataFilePath
+  )
+
+  return {
+    success: true,
+
+    transaction: {
+      transactionNo,
+      date: transactionDate,
+      type: transactionType,
+
+      clientCode,
+      clientName:
+        client['거래처명'] ?? '',
+
+      itemCode,
+      itemName:
+        item['품목명'] ?? '',
+
+      quantity,
+      unitPrice,
+      supplyAmount,
+      vat,
+      totalAmount
+    },
+
+    previousStock: currentStockValue,
+    currentStock: newStock,
+
+    stockWarning:
+      transactionType === '출고' &&
+      newStock < 0
+  }
+}
+
+function cancelTransaction(transactionNo, reason = '') {
+  const dataFilePath = getLocalDataFilePath(dataFileName)
+
+  if (!existsSync(dataFilePath)) {
+    throw new Error('재고관리 데이터 파일이 없습니다.')
+  }
+
+  const workbook = XLSX.readFile(dataFilePath, {
+    cellDates: true
+  })
+
+  const transactionRows = readSheetRows(
+    workbook,
+    '입출고내역'
+  )
+
+  const itemRows = readSheetRows(
+    workbook,
+    '품목'
+  )
+
+  const targetTransactionNo = Number(transactionNo)
+
+  if (!Number.isFinite(targetTransactionNo)) {
+    throw new Error('올바른 거래번호가 아닙니다.')
+  }
+
+  const transactionIndex = transactionRows.findIndex(
+    (row) =>
+      Number(row['거래번호']) === targetTransactionNo
+  )
+
+  if (transactionIndex < 0) {
+    throw new Error(
+      `거래번호 ${targetTransactionNo}번을 찾을 수 없습니다.`
+    )
+  }
+
+  const transaction = transactionRows[transactionIndex]
+
+  if (
+    String(transaction['취소여부'] ?? 'N').trim() === 'Y'
+  ) {
+    throw new Error('이미 취소된 거래입니다.')
+  }
+
+  const transactionType =
+    String(transaction['구분'] ?? '').trim()
+
+  if (!allowedTransactionTypes.includes(transactionType)) {
+    throw new Error(
+      `올바르지 않은 거래 구분입니다: ${transactionType}`
+    )
+  }
+
+  const itemCode =
+    normalizeCode(transaction['품목코드'])
+
+  if (!itemCode) {
+    throw new Error(
+      '해당 거래의 품목코드가 없습니다.'
+    )
+  }
+
+  const itemIndex = itemRows.findIndex(
+    (row) =>
+      normalizeCode(row['코드']) === itemCode
+  )
+
+  if (itemIndex < 0) {
+    throw new Error(
+      `현재 품목 목록에 ${itemCode} 품목이 없어 재고를 되돌릴 수 없습니다.`
+    )
+  }
+
+  const quantity = Number(transaction['수량'])
+
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw new Error(
+      `${targetTransactionNo}번 거래의 수량이 올바르지 않습니다.`
+    )
+  }
+
+  const currentStock =
+    itemRows[itemIndex]['현재재고량'] === ''
+      ? 0
+      : Number(itemRows[itemIndex]['현재재고량'])
+
+  if (!Number.isFinite(currentStock)) {
+    throw new Error(
+      `${itemCode} 품목의 현재재고량이 올바르지 않습니다.`
+    )
+  }
+
+  let newStock = currentStock
+
+  if (transactionType === '출고') {
+    newStock += quantity
+  } else if (
+    transactionType === '입고' ||
+    transactionType === '출고반입'
+  ) {
+    newStock -= quantity
+  }
+
+  transactionRows[transactionIndex] = {
+    ...transaction,
+    취소여부: 'Y',
+    취소일시: new Date(),
+    취소사유: String(reason ?? '').trim()
+  }
+
+  itemRows[itemIndex] = {
+    ...itemRows[itemIndex],
+    현재재고량: newStock
+  }
+
+  const newTransactionRows =
+    transactionRows.map((row) =>
+      workbookHeaders['입출고내역'].map(
+        (header) => row[header] ?? ''
+      )
+    )
+
+  const newItemRows =
+    itemRows.map((row) =>
+      workbookHeaders['품목'].map(
+        (header) => row[header] ?? ''
+      )
+    )
+
+  replaceSheet(
+    workbook,
+    '입출고내역',
+    workbookHeaders['입출고내역'],
+    newTransactionRows
+  )
+
+  replaceSheet(
+    workbook,
+    '품목',
+    workbookHeaders['품목'],
+    newItemRows
+  )
+
+  formatDateSheet(
+    workbook.Sheets['입출고내역']
+  )
+
+  saveWorkbookSafely(
+    workbook,
+    dataFilePath
+  )
+
+  return {
+    success: true,
+    transactionNo: targetTransactionNo,
+    type: transactionType,
+    itemCode,
+    quantity,
+    previousStock: currentStock,
+    currentStock: newStock,
+    stockWarning: newStock < 0
+  }
+}
+
+function normalizeDateOnly(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const year = value.getFullYear()
+    const month = String(value.getMonth() + 1).padStart(2, '0')
+    const day = String(value.getDate()).padStart(2, '0')
+
+    return `${year}-${month}-${day}`
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+
+    const match = trimmed.match(
+      /^(\d{4})-(\d{2})-(\d{2})$/
+    )
+
+    if (match) {
+      return trimmed
+    }
+  }
+
+  return ''
+}
+
+function checkInventory(referenceDate) {
+  const dataFilePath = getLocalDataFilePath(dataFileName)
+
+  if (!existsSync(dataFilePath)) {
+    throw new Error('재고관리 데이터 파일이 없습니다.')
+  }
+
+  const normalizedReferenceDate =
+    normalizeDateOnly(referenceDate)
+
+  if (!normalizedReferenceDate) {
+    throw new Error('올바른 기준일을 입력해주세요.')
+  }
+
+  const workbook = XLSX.readFile(dataFilePath, {
+    cellDates: true
+  })
+
+  const itemRows = readSheetRows(
+    workbook,
+    '품목'
+  )
+
+  const transactionRows = readSheetRows(
+    workbook,
+    '입출고내역'
+  )
+
+  const result = []
+
+  for (const item of itemRows) {
+    const itemCode =
+      normalizeCode(item['코드'])
+
+    if (!itemCode) {
+      continue
+    }
+
+    const itemName =
+      String(item['품목명'] ?? '').trim()
+
+    const initialStock =
+      item['기초재고량'] === ''
+        ? 0
+        : Number(item['기초재고량'])
+
+    const currentStock =
+      item['현재재고량'] === ''
+        ? 0
+        : Number(item['현재재고량'])
+
+    if (!Number.isFinite(initialStock)) {
+      throw new Error(
+        `${itemCode} 품목의 기초재고량이 올바르지 않습니다.`
+      )
+    }
+
+    if (!Number.isFinite(currentStock)) {
+      throw new Error(
+        `${itemCode} 품목의 현재재고량이 올바르지 않습니다.`
+      )
+    }
+
+    let calculatedStock = initialStock
+
+    let inQuantity = 0
+    let outQuantity = 0
+    let returnQuantity = 0
+
+    for (const transaction of transactionRows) {
+      if (
+        normalizeCode(transaction['품목코드']) !==
+        itemCode
+      ) {
+        continue
+      }
+
+      if (
+        String(
+          transaction['취소여부'] ?? 'N'
+        ).trim() === 'Y'
+      ) {
+        continue
+      }
+
+      const transactionDate =
+        normalizeDateOnly(transaction['일자'])
+
+      if (!transactionDate) {
+        continue
+      }
+
+      if (
+        transactionDate <
+        normalizedReferenceDate
+      ) {
+        continue
+      }
+
+      const type =
+        String(transaction['구분'] ?? '').trim()
+
+      const quantity =
+        Number(transaction['수량'])
+
+      if (
+        !Number.isFinite(quantity) ||
+        quantity < 0
+      ) {
+        throw new Error(
+          `${transaction['거래번호']}번 거래의 수량이 올바르지 않습니다.`
+        )
+      }
+
+      if (type === '입고') {
+        calculatedStock += quantity
+        inQuantity += quantity
+      } else if (type === '출고') {
+        calculatedStock -= quantity
+        outQuantity += quantity
+      } else if (type === '출고반입') {
+        calculatedStock += quantity
+        returnQuantity += quantity
+      }
+    }
+
+    const difference =
+      currentStock - calculatedStock
+
+    if (difference !== 0) {
+      result.push({
+        code: itemCode,
+        name: itemName,
+
+        initialStock,
+        inQuantity,
+        outQuantity,
+        returnQuantity,
+
+        calculatedStock,
+        currentStock,
+        difference
+      })
+    }
+  }
+
+  return {
+    success: true,
+    referenceDate:
+      normalizedReferenceDate,
+
+    totalItemCount:
+      itemRows.filter(
+        (item) => normalizeCode(item['코드'])
+      ).length,
+
+    mismatchCount:
+      result.length,
+
+    mismatches:
+      result
+  }
+}
+
 function createWindow() {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -509,10 +1717,56 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  ipcMain.handle('items:get', () => readItemsFromExcel())
   ipcMain.handle('data-file:create', () => createDataFile())
   ipcMain.handle('legacy-master-data:import', () => importLegacyMasterData())
   ipcMain.handle('legacy-transactions:import', () => importLegacyTransactions())
+  ipcMain.handle('items:get', () => readItemsFromExcel())
+  ipcMain.handle('items:add', (_, item) => addItem(item))
+  ipcMain.handle('items:update', (_, originalCode, item) =>
+    updateItem(originalCode, item)
+  )
+  ipcMain.handle('items:delete', (_, code) => deleteItem(code))
+
+  ipcMain.handle('clients:get', (_, clientType) =>
+    readClientsFromExcel(clientType)
+  )
+
+  ipcMain.handle('clients:add', (_, clientType, client) =>
+    addClient(clientType, client)
+  )
+
+  ipcMain.handle(
+    'clients:update',
+    (_, clientType, originalCode, client) =>
+      updateClient(clientType, originalCode, client)
+  )
+
+  ipcMain.handle('clients:delete', (_, clientType, code) =>
+    deleteClient(clientType, code)
+  )
+
+  ipcMain.handle(
+    'transactions:get',
+    () => readTransactionsFromExcel()
+  )
+  
+  ipcMain.handle(
+    'transactions:add',
+    (_, transaction) =>
+      addTransaction(transaction)
+  )
+
+  ipcMain.handle(
+    'transactions:cancel',
+    (_, transactionNo, reason) =>
+      cancelTransaction(transactionNo, reason)
+  )
+
+  ipcMain.handle(
+    'inventory:check',
+    (_, referenceDate) =>
+      checkInventory(referenceDate)
+  )
 
   createWindow()
 

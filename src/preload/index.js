@@ -4,9 +4,51 @@ import { electronAPI } from '@electron-toolkit/preload'
 // Custom APIs for renderer
 const inventoryApi = {
   getItems: () => ipcRenderer.invoke('items:get'),
-  createDataFile: () => ipcRenderer.invoke('data-file:create'),
-  importLegacyMasterData: () => ipcRenderer.invoke('legacy-master-data:import'),
-  importLegacyTransactions: () => ipcRenderer.invoke('legacy-transactions:import')
+  addItem: (item) => ipcRenderer.invoke('items:add', item),
+  updateItem: (originalCode, item) =>
+    ipcRenderer.invoke('items:update', originalCode, item),
+  deleteItem: (code) =>
+    ipcRenderer.invoke('items:delete', code),
+
+  getClients: (clientType) =>
+    ipcRenderer.invoke('clients:get', clientType),
+
+  addClient: (clientType, client) =>
+    ipcRenderer.invoke('clients:add', clientType, client),
+
+  updateClient: (clientType, originalCode, client) =>
+    ipcRenderer.invoke('clients:update', clientType, originalCode, client),
+
+  deleteClient: (clientType, code) =>
+    ipcRenderer.invoke('clients:delete', clientType, code),
+
+  getTransactions: () =>
+    ipcRenderer.invoke('transactions:get'),
+
+  addTransaction: (transaction) =>
+    ipcRenderer.invoke('transactions:add', transaction),
+
+  cancelTransaction: (transactionNo, reason) =>
+    ipcRenderer.invoke(
+      'transactions:cancel',
+      transactionNo,
+      reason
+    ),
+
+    checkInventory: (referenceDate) =>
+      ipcRenderer.invoke(
+        'inventory:check',
+        referenceDate
+      ),
+
+  createDataFile: () =>
+    ipcRenderer.invoke('data-file:create'),
+
+  importLegacyMasterData: () =>
+    ipcRenderer.invoke('legacy-master-data:import'),
+
+  importLegacyTransactions: () =>
+    ipcRenderer.invoke('legacy-transactions:import')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
