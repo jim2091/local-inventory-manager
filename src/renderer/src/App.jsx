@@ -3,10 +3,15 @@ import TransactionList from './components/TransactionList'
 import ItemManager from './components/ItemManager'
 import ClientManager from './components/ClientManager'
 import InventoryChecker from './components/InventoryChecker'
+import BackupManager from './components/BackupManager'
 
 function App() {
   return (
     <>
+      <BackupManager />
+
+      <hr />
+
       <TransactionManager />
 
       <hr />
@@ -24,6 +29,8 @@ function App() {
       <hr />
 
       <ClientManager />
+
+      
     </>
   )
 }

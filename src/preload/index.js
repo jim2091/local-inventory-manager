@@ -35,11 +35,43 @@ const inventoryApi = {
       reason
     ),
 
-    checkInventory: (referenceDate) =>
-      ipcRenderer.invoke(
-        'inventory:check',
-        referenceDate
-      ),
+  checkInventory: (referenceDate) =>
+    ipcRenderer.invoke(
+      'inventory:check',
+      referenceDate
+    ),
+
+  createBackup: () =>
+    ipcRenderer.invoke(
+      'backup:create'
+    ),
+
+  getBackups: () =>
+    ipcRenderer.invoke(
+      'backup:list'
+    ),
+
+  restoreBackup: (fileName) =>
+    ipcRenderer.invoke(
+      'backup:restore',
+      fileName
+  ),
+
+  getBackupSettings: () =>
+    ipcRenderer.invoke(
+      'backup:settings:get'
+    ),
+
+  saveBackupSettings: (settings) =>
+    ipcRenderer.invoke(
+      'backup:settings:save',
+      settings
+    ),
+
+  openBackupFolder: () =>
+    ipcRenderer.invoke(
+      'backup:folder:open'
+    ),
 
   createDataFile: () =>
     ipcRenderer.invoke('data-file:create'),

@@ -1,6 +1,15 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
-import { copyFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
-import { join } from 'path'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  unlinkSync,
+  readdirSync,
+  statSync,
+  readFileSync,
+  writeFileSync
+} from 'fs'
+import { join, basename } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import * as XLSX from 'xlsx'
@@ -22,6 +31,7 @@ const itemColumnMap = {
 const dataFileName = '재고관리데이터.xlsx'
 const legacyFileName = '재고관리 프로그램_v1.3.xlsm'
 const tempDataFileName = '재고관리데이터.tmp.xlsx'
+const settingsFileName = 'settings.json'
 const masterSheetNames = ['품목', '매출거래처', '매입거래처']
 const allowedTransactionTypes = ['입고', '출고', '출고반입']
 
@@ -1115,6 +1125,8 @@ function addTransaction(transaction) {
     throw new Error('재고관리 데이터 파일이 없습니다.')
   }
 
+  runAutoBackupIfNeeded()
+
   const workbook = XLSX.readFile(dataFilePath, {
     cellDates: true
   })
@@ -1678,6 +1690,406 @@ function checkInventory(referenceDate) {
   }
 }
 
+function getBackupFolderPath() {
+  return getLocalDataFilePath('backup')
+}
+
+function createBackupFileName(prefix = 'backup') {
+  const now = new Date()
+
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+
+  const hour = String(now.getHours()).padStart(2, '0')
+  const minute = String(now.getMinutes()).padStart(2, '0')
+  const second = String(now.getSeconds()).padStart(2, '0')
+
+  return `${prefix}_${year}${month}${day}_${hour}${minute}${second}.xlsx`
+}
+
+function createBackup(prefix = 'backup') {
+  const dataFilePath =
+    getLocalDataFilePath(dataFileName)
+
+  if (!existsSync(dataFilePath)) {
+    throw new Error(
+      '백업할 재고관리 데이터 파일이 없습니다.'
+    )
+  }
+
+  const backupFolderPath =
+    getBackupFolderPath()
+
+  mkdirSync(
+    backupFolderPath,
+    { recursive: true }
+  )
+
+  const backupFileName =
+    createBackupFileName(prefix)
+
+  const backupFilePath =
+    join(
+      backupFolderPath,
+      backupFileName
+    )
+
+  copyFileSync(
+    dataFilePath,
+    backupFilePath
+  )
+
+  // 생성된 백업이 실제 Excel 파일로 읽히는지 확인
+  XLSX.readFile(
+    backupFilePath,
+    { cellDates: true }
+  )
+
+  return {
+    success: true,
+    fileName: backupFileName,
+    filePath: backupFilePath
+  }
+}
+
+function getTodayDateKey() {
+  const now = new Date()
+
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+
+  return `${year}${month}${day}`
+}
+
+function hasTodayAutoBackup() {
+  const backupFolderPath = getBackupFolderPath()
+
+  if (!existsSync(backupFolderPath)) {
+    return false
+  }
+
+  const today = getTodayDateKey()
+
+  return readdirSync(backupFolderPath).some(
+    (fileName) =>
+      fileName.startsWith(`auto_${today}_`) &&
+      fileName.toLowerCase().endsWith('.xlsx')
+  )
+}
+
+function cleanupOldBackups(maxCount = 30) {
+  const backupFolderPath = getBackupFolderPath()
+
+  if (!existsSync(backupFolderPath)) {
+    return {
+      success: true,
+      deletedCount: 0
+    }
+  }
+
+  const backupFiles = readdirSync(backupFolderPath)
+    .filter((fileName) =>
+      fileName.toLowerCase().endsWith('.xlsx')
+    )
+    .map((fileName) => {
+      const filePath = join(
+        backupFolderPath,
+        fileName
+      )
+
+      const stat = statSync(filePath)
+
+      return {
+        fileName,
+        filePath,
+        modifiedAt: stat.mtime
+      }
+    })
+    .sort(
+      (a, b) =>
+        b.modifiedAt.getTime() -
+        a.modifiedAt.getTime()
+    )
+
+  if (backupFiles.length <= maxCount) {
+    return {
+      success: true,
+      deletedCount: 0
+    }
+  }
+
+  const filesToDelete =
+    backupFiles.slice(maxCount)
+
+  for (const file of filesToDelete) {
+    unlinkSync(file.filePath)
+  }
+
+  return {
+    success: true,
+    deletedCount:
+      filesToDelete.length
+  }
+}
+
+function runAutoBackupIfNeeded() {
+  const settings =
+    getBackupSettings()
+
+  if (!settings.autoBackup) {
+    return {
+      backupCreated: false,
+      cleanupCount: 0
+    }
+  }
+
+  let backupCreated = false
+
+  if (!hasTodayAutoBackup()) {
+    createBackup('auto')
+    backupCreated = true
+  }
+
+  let cleanupCount = 0
+
+  if (settings.autoCleanup) {
+    const cleanupResult =
+      cleanupOldBackups(30)
+
+    cleanupCount =
+      cleanupResult.deletedCount
+  }
+
+  return {
+    backupCreated,
+    cleanupCount
+  }
+}
+
+function getBackupList() {
+  const backupFolderPath =
+    getBackupFolderPath()
+
+  if (!existsSync(backupFolderPath)) {
+    return []
+  }
+
+  return readdirSync(backupFolderPath)
+    .filter((fileName) =>
+      fileName.toLowerCase().endsWith('.xlsx')
+    )
+    .map((fileName) => {
+      const filePath =
+        join(
+          backupFolderPath,
+          fileName
+        )
+
+      const stat =
+        statSync(filePath)
+
+      return {
+        fileName,
+        size: stat.size,
+        modifiedAt:
+          stat.mtime.toISOString()
+      }
+    })
+    .sort(
+      (a, b) =>
+        new Date(b.modifiedAt) -
+        new Date(a.modifiedAt)
+    )
+}
+
+function restoreBackup(fileName) {
+  const safeFileName =
+    basename(String(fileName ?? ''))
+
+  if (!safeFileName) {
+    throw new Error(
+      '복원할 백업 파일을 선택해주세요.'
+    )
+  }
+
+  const backupFilePath =
+    join(
+      getBackupFolderPath(),
+      safeFileName
+    )
+
+  if (!existsSync(backupFilePath)) {
+    throw new Error(
+      '선택한 백업 파일을 찾을 수 없습니다.'
+    )
+  }
+
+  const dataFilePath =
+    getLocalDataFilePath(dataFileName)
+
+  // 백업 파일이 정상 Excel인지 먼저 확인
+  XLSX.readFile(
+    backupFilePath,
+    { cellDates: true }
+  )
+
+  // 현재 데이터가 있으면 복원 전에 자동 백업
+  let beforeRestoreBackup = null
+
+  if (existsSync(dataFilePath)) {
+    beforeRestoreBackup =
+      createBackup('before_restore')
+  }
+
+  const tempRestorePath =
+    getLocalDataFilePath(
+      '재고관리데이터.restore.tmp.xlsx'
+    )
+
+  if (existsSync(tempRestorePath)) {
+    unlinkSync(tempRestorePath)
+  }
+
+  try {
+    // 선택한 백업을 임시 파일로 복사
+    copyFileSync(
+      backupFilePath,
+      tempRestorePath
+    )
+
+    // 임시 파일 검증
+    XLSX.readFile(
+      tempRestorePath,
+      { cellDates: true }
+    )
+
+    // 검증 성공 후 실제 데이터 파일 교체
+    copyFileSync(
+      tempRestorePath,
+      dataFilePath
+    )
+
+    // 복원된 실제 파일 다시 확인
+    XLSX.readFile(
+      dataFilePath,
+      { cellDates: true }
+    )
+
+    unlinkSync(tempRestorePath)
+
+    return {
+      success: true,
+      restoredFileName:
+        safeFileName,
+
+      beforeRestoreBackupFileName:
+        beforeRestoreBackup?.fileName ?? ''
+    }
+  } catch (error) {
+    if (existsSync(tempRestorePath)) {
+      unlinkSync(tempRestorePath)
+    }
+
+    throw error
+  }
+}
+
+function getSettingsFilePath() {
+  return getLocalDataFilePath(settingsFileName)
+}
+
+function getDefaultSettings() {
+  return {
+    autoBackup: false,
+    autoCleanup: false
+  }
+}
+
+function getBackupSettings() {
+  const settingsFilePath =
+    getSettingsFilePath()
+
+  if (!existsSync(settingsFilePath)) {
+    return getDefaultSettings()
+  }
+
+  try {
+    const text = readFileSync(
+      settingsFilePath,
+      'utf-8'
+    )
+
+    const savedSettings =
+      JSON.parse(text)
+
+    return {
+      autoBackup:
+        savedSettings.autoBackup === true,
+
+      autoCleanup:
+        savedSettings.autoCleanup === true
+    }
+  } catch (error) {
+    console.error(
+      '설정 파일을 읽지 못했습니다.',
+      error
+    )
+
+    return getDefaultSettings()
+  }
+}
+
+function saveBackupSettings(settings) {
+  const settingsFilePath =
+    getSettingsFilePath()
+
+  mkdirSync(
+    join(process.cwd(), 'local-data'),
+    { recursive: true }
+  )
+
+  const newSettings = {
+    autoBackup:
+      Boolean(settings.autoBackup),
+
+    autoCleanup:
+      Boolean(settings.autoCleanup)
+  }
+
+  writeFileSync(
+    settingsFilePath,
+    JSON.stringify(
+      newSettings,
+      null,
+      2
+    ),
+    'utf-8'
+  )
+
+  return {
+    success: true,
+    ...newSettings
+  }
+}
+
+function openBackupFolder() {
+  const backupFolderPath = getBackupFolderPath()
+
+  mkdirSync(
+    backupFolderPath,
+    { recursive: true }
+  )
+
+  shell.openPath(backupFolderPath)
+
+  return {
+    success: true
+  }
+}
+
+
 function createWindow() {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -1766,6 +2178,38 @@ app.whenReady().then(() => {
     'inventory:check',
     (_, referenceDate) =>
       checkInventory(referenceDate)
+  )
+
+  ipcMain.handle(
+    'backup:create',
+    () => createBackup()
+  )
+
+  ipcMain.handle(
+    'backup:list',
+    () => getBackupList()
+  )
+
+  ipcMain.handle(
+    'backup:restore',
+    (_, fileName) =>
+      restoreBackup(fileName)
+  )
+
+  ipcMain.handle(
+    'backup:settings:get',
+    () => getBackupSettings()
+  )
+
+  ipcMain.handle(
+    'backup:settings:save',
+    (_, settings) =>
+      saveBackupSettings(settings)
+  )
+
+  ipcMain.handle(
+    'backup:folder:open',
+    () => openBackupFolder()
   )
 
   createWindow()
