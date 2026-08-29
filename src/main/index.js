@@ -1,4 +1,10 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import {
+  app,
+  shell,
+  BrowserWindow,
+  ipcMain,
+  dialog
+} from 'electron'
 import {
   copyFileSync,
   existsSync,
@@ -71,8 +77,48 @@ const workbookHeaders = {
   설정: ['항목', '값']
 }
 
-function getLocalDataFilePath(fileName) {
-  return join(process.cwd(), 'local-data', fileName)
+function getDevLocalDataFilePath(fileName) {
+  return join(
+    process.cwd(),
+    'local-data',
+    fileName
+  )
+}
+
+function getDataFolderPath() {
+  return join(
+    app.getPath('documents'),
+    '재고관리 프로그램'
+  )
+}
+
+function getDataFilePath(fileName) {
+  return join(
+    getDataFolderPath(),
+    fileName
+  )
+}
+
+function ensureDataFolders() {
+  const dataFolderPath =
+    getDataFolderPath()
+
+  mkdirSync(
+    dataFolderPath,
+    { recursive: true }
+  )
+
+  mkdirSync(
+    join(dataFolderPath, 'backup'),
+    { recursive: true }
+  )
+
+  mkdirSync(
+    join(dataFolderPath, 'export'),
+    { recursive: true }
+  )
+
+  return dataFolderPath
 }
 
 function readSheetRows(workbook, sheetName) {
@@ -126,7 +172,8 @@ function replaceSheet(workbook, sheetName, headers, rows) {
 }
 
 function saveWorkbookSafely(workbook, filePath) {
-  const tempFilePath = getLocalDataFilePath(tempDataFileName)
+  ensureDataFolders()
+  const tempFilePath = getDataFilePath(tempDataFileName)
 
   if (existsSync(tempFilePath)) {
     unlinkSync(tempFilePath)
@@ -139,7 +186,7 @@ function saveWorkbookSafely(workbook, filePath) {
 }
 
 function readItemsFromExcel() {
-  const filePath = getLocalDataFilePath(dataFileName)
+  const filePath = getDataFilePath(dataFileName)
   const workbook = XLSX.readFile(filePath, { cellDates: true })
   const itemSheet = workbook.Sheets['품목']
 
@@ -166,7 +213,7 @@ function readItemsFromExcel() {
 }
 
 function readTransactionsFromExcel() {
-  const dataFilePath = getLocalDataFilePath(dataFileName)
+  const dataFilePath = getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
     throw new Error('재고관리 데이터 파일이 없습니다.')
@@ -262,7 +309,7 @@ function readTransactionsFromExcel() {
 }
 
 function addItem(item) {
-  const dataFilePath = getLocalDataFilePath(dataFileName)
+  const dataFilePath = getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
     throw new Error('재고관리 데이터 파일이 없습니다.')
@@ -329,7 +376,7 @@ function addItem(item) {
 }
 
 function createDataFile() {
-  const filePath = getLocalDataFilePath(dataFileName)
+  const filePath = getDataFilePath(dataFileName)
 
   if (existsSync(filePath)) {
     return {
@@ -339,7 +386,7 @@ function createDataFile() {
     }
   }
 
-  mkdirSync(join(process.cwd(), 'local-data'), { recursive: true })
+  ensureDataFolders()
 
   XLSX.writeFile(buildWorkbookWithDefaultSheets(), filePath, { bookType: 'xlsx' })
 
@@ -362,20 +409,20 @@ function buildWorkbookWithDefaultSheets() {
 }
 
 function createDataFileIfMissing() {
-  const filePath = getLocalDataFilePath(dataFileName)
+  const filePath = getDataFilePath(dataFileName)
 
   if (existsSync(filePath)) {
     return filePath
   }
 
-  mkdirSync(join(process.cwd(), 'local-data'), { recursive: true })
+  ensureDataFolders()
   XLSX.writeFile(buildWorkbookWithDefaultSheets(), filePath, { bookType: 'xlsx' })
 
   return filePath
 }
 
 function getLegacyMasterData() {
-  const legacyFilePath = getLocalDataFilePath(legacyFileName)
+  const legacyFilePath = getDevLocalDataFilePath(legacyFileName)
   const legacyWorkbook = XLSX.readFile(legacyFilePath, { cellDates: true })
 
   for (const sheetName of masterSheetNames) {
@@ -441,6 +488,576 @@ function readLegacyTransactionRows(legacyWorkbook) {
     })
     .slice(2)
     .filter((row) => row.some((value) => value !== ''))
+}
+
+function validateExistingExcelWorkbook(workbook) {
+  const requiredSheets = [
+    '입출고내역',
+    '품목',
+    '매출거래처',
+    '매입거래처'
+  ]
+
+  for (const sheetName of requiredSheets) {
+    if (!workbook.Sheets[sheetName]) {
+      throw new Error(
+        `필수 시트가 없습니다: ${sheetName}`
+      )
+    }
+  }
+
+  // 품목 시트 검사
+  const itemRows = XLSX.utils.sheet_to_json(
+    workbook.Sheets['품목'],
+    {
+      header: 1,
+      defval: '',
+      raw: true
+    }
+  )
+
+  const itemHeaders =
+    itemRows[0]?.map((value) =>
+      String(value ?? '').trim()
+    ) ?? []
+
+  const requiredItemHeaders = [
+    '구분',
+    '코드',
+    '품목명',
+    '기초재고단가',
+    '매입단가',
+    '매출단가',
+    '기초재고량',
+    '현재재고량',
+    '단위',
+    '규격',
+    '브랜드명'
+  ]
+
+  for (const header of requiredItemHeaders) {
+    if (!itemHeaders.includes(header)) {
+      throw new Error(
+        `품목 시트에 필요한 열이 없습니다: ${header}`
+      )
+    }
+  }
+
+  // 거래처 시트 검사
+  for (const sheetName of [
+    '매출거래처',
+    '매입거래처'
+  ]) {
+    const rows = XLSX.utils.sheet_to_json(
+      workbook.Sheets[sheetName],
+      {
+        header: 1,
+        defval: '',
+        raw: true
+      }
+    )
+
+    const headers =
+      rows[0]?.map((value) =>
+        String(value ?? '').trim()
+      ) ?? []
+
+    if (!headers.includes('코드')) {
+      throw new Error(
+        `${sheetName} 시트에 코드 열이 없습니다.`
+      )
+    }
+
+    if (!headers.includes('거래처명')) {
+      throw new Error(
+        `${sheetName} 시트에 거래처명 열이 없습니다.`
+      )
+    }
+  }
+
+  // 기존 입출고내역 형식 검사
+  const transactionRows =
+    XLSX.utils.sheet_to_json(
+      workbook.Sheets['입출고내역'],
+      {
+        header: 1,
+        defval: '',
+        raw: true
+      }
+    )
+
+  if (transactionRows.length < 2) {
+    throw new Error(
+      '입출고내역 시트 형식이 올바르지 않습니다.'
+    )
+  }
+
+  const firstHeaderRow =
+    transactionRows[0]
+
+  const secondHeaderRow =
+    transactionRows[1]
+
+  if (
+    String(firstHeaderRow?.[0] ?? '').trim() !== '키' ||
+    String(firstHeaderRow?.[1] ?? '').trim() !== '일자' ||
+    String(firstHeaderRow?.[2] ?? '').trim() !== '구분'
+  ) {
+    throw new Error(
+      '입출고내역 시트의 기본 형식이 기존 프로그램과 다릅니다.'
+    )
+  }
+
+  if (
+    String(secondHeaderRow?.[3] ?? '').trim() !== '코드' ||
+    String(secondHeaderRow?.[4] ?? '').trim() !== '거래처명' ||
+    String(secondHeaderRow?.[6] ?? '').trim() !== '코드' ||
+    String(secondHeaderRow?.[7] ?? '').trim() !== '품목명'
+  ) {
+    throw new Error(
+      '입출고내역 시트의 거래처/품목 열 구조가 올바르지 않습니다.'
+    )
+  }
+
+  return true
+}
+
+function getExistingMasterData(sourceWorkbook) {
+  const itemRows =
+    readSheetRows(
+      sourceWorkbook,
+      '품목'
+    ).filter(
+      (row) =>
+        normalizeCode(row['코드'])
+    )
+
+  const salesClientRows =
+    readSheetRows(
+      sourceWorkbook,
+      '매출거래처'
+    ).filter(
+      (row) =>
+        normalizeCode(row['코드'])
+    )
+
+  const purchaseClientRows =
+    readSheetRows(
+      sourceWorkbook,
+      '매입거래처'
+    ).filter(
+      (row) =>
+        normalizeCode(row['코드'])
+    )
+
+  validateDuplicateCodes(
+    itemRows,
+    '품목'
+  )
+
+  validateDuplicateCodes(
+    salesClientRows,
+    '매출거래처'
+  )
+
+  validateDuplicateCodes(
+    purchaseClientRows,
+    '매입거래처'
+  )
+
+  return {
+    items:
+      itemRows.map((row) =>
+        workbookHeaders['품목'].map(
+          (header) =>
+            row[header] ?? ''
+        )
+      ),
+
+    salesClients:
+      salesClientRows.map((row) => [
+        row['코드'] ?? '',
+        row['거래처명'] ?? ''
+      ]),
+
+    purchaseClients:
+      purchaseClientRows.map((row) => [
+        row['코드'] ?? '',
+        row['거래처명'] ?? ''
+      ])
+  }
+}
+
+function getExistingTransactionData(
+  sourceWorkbook,
+  targetWorkbook
+) {
+  const sourceRows =
+    readLegacyTransactionRows(
+      sourceWorkbook
+    )
+
+  const transactionNos =
+    new Set()
+
+  const duplicateTransactionNos =
+    new Set()
+
+  const transactionTypeCounts = {
+    입고: 0,
+    출고: 0,
+    출고반입: 0
+  }
+
+  const missingItemCodes =
+    new Set()
+
+  const missingClientCodes =
+    new Set()
+
+  const {
+    itemCodes,
+    clientCodes
+  } = getMasterCodeSets(
+    targetWorkbook
+  )
+
+  let maxTransactionNo = 0
+
+  let normalizedReturnCount = 0
+
+  const transactions =
+    sourceRows.map((row) => {
+      const transactionNo =
+        parseTransactionNo(row[0])
+
+      if (transactionNo === null) {
+        throw new Error(
+          `거래번호가 없거나 숫자가 아닌 행이 있습니다: ${row[0]}`
+        )
+      }
+
+      if (
+        transactionNos.has(
+          transactionNo
+        )
+      ) {
+        duplicateTransactionNos.add(
+          transactionNo
+        )
+      }
+
+      transactionNos.add(
+        transactionNo
+      )
+
+      maxTransactionNo =
+        Math.max(
+          maxTransactionNo,
+          transactionNo
+        )
+
+      const transactionType =
+        String(
+          row[2] ?? ''
+        ).trim()
+
+      if (
+        !allowedTransactionTypes.includes(
+          transactionType
+        )
+      ) {
+        throw new Error(
+          `${transactionNo}번 거래에 알 수 없는 구분이 있습니다: ${transactionType}`
+        )
+      }
+
+      const quantity =
+        parseRequiredNumber(
+          row[10],
+          transactionNo,
+          '수량'
+        )
+
+      let normalizedQuantity =
+        quantity
+
+      // 기존 프로그램의 출고반입 음수 → 신규 프로그램 양수
+      if (
+        transactionType === '출고반입' &&
+        quantity < 0
+      ) {
+        normalizedQuantity =
+          Math.abs(quantity)
+
+        normalizedReturnCount += 1
+      } else if (
+        (
+          transactionType === '입고' ||
+          transactionType === '출고'
+        ) &&
+        quantity < 0
+      ) {
+        throw new Error(
+          `${transactionNo}번 ${transactionType} 거래의 수량이 음수입니다.`
+        )
+      }
+
+      const itemCode =
+        normalizeCode(row[6])
+
+      const clientCode =
+        normalizeCode(row[3])
+
+      if (
+        itemCode &&
+        !itemCodes.has(itemCode)
+      ) {
+        missingItemCodes.add(
+          itemCode
+        )
+      }
+
+      if (
+        clientCode &&
+        !clientCodes.has(clientCode)
+      ) {
+        missingClientCodes.add(
+          clientCode
+        )
+      }
+
+      transactionTypeCounts[
+        transactionType
+      ] += 1
+
+      return [
+        transactionNo,
+        parseLegacyDate(
+          row[1],
+          transactionNo
+        ),
+        transactionType,
+        row[3] ?? '',
+        row[4] ?? '',
+        row[6] ?? '',
+        row[7] ?? '',
+        normalizedQuantity,
+        parseOptionalNumber(
+          row[11],
+          transactionNo,
+          '단가'
+        ),
+        parseOptionalNumber(
+          row[12],
+          transactionNo,
+          '공급가액'
+        ),
+        parseOptionalNumber(
+          row[13],
+          transactionNo,
+          '부가세'
+        ),
+        parseOptionalNumber(
+          row[14],
+          transactionNo,
+          '합계'
+        ),
+        'N',
+        '',
+        ''
+      ]
+    })
+
+  if (
+    duplicateTransactionNos.size > 0
+  ) {
+    throw new Error(
+      `중복 거래번호가 있습니다: ${Array.from(
+        duplicateTransactionNos
+      ).join(', ')}`
+    )
+  }
+
+  return {
+    transactions,
+    maxTransactionNo,
+    transactionTypeCounts,
+    normalizedReturnCount,
+
+    missingItemCodes:
+      Array.from(
+        missingItemCodes
+      ),
+
+    missingClientCodes:
+      Array.from(
+        missingClientCodes
+      )
+  }
+}
+
+async function importExistingExcel() {
+  const selectResult =
+    await dialog.showOpenDialog({
+      title: '기존 재고관리 Excel 선택',
+
+      properties: [
+        'openFile'
+      ],
+
+      filters: [
+        {
+          name: 'Excel 파일',
+          extensions: [
+            'xlsx',
+            'xlsm'
+          ]
+        }
+      ]
+    })
+
+  if (
+    selectResult.canceled ||
+    selectResult.filePaths.length === 0
+  ) {
+    return {
+      success: false,
+      canceled: true
+    }
+  }
+
+  const sourceFilePath =
+    selectResult.filePaths[0]
+
+  // 사용자가 선택한 기존 원본
+  const sourceWorkbook =
+    XLSX.readFile(
+      sourceFilePath,
+      {
+        cellDates: true
+      }
+    )
+
+  // 원본 구조 검사
+  validateExistingExcelWorkbook(
+    sourceWorkbook
+  )
+
+  // 마스터 데이터 읽기
+  const masterData =
+    getExistingMasterData(
+      sourceWorkbook
+    )
+
+  // 완전히 새로운 업무 데이터 Workbook 생성
+  const targetWorkbook =
+    buildWorkbookWithDefaultSheets()
+
+  replaceSheet(
+    targetWorkbook,
+    '품목',
+    workbookHeaders['품목'],
+    masterData.items
+  )
+
+  replaceSheet(
+    targetWorkbook,
+    '매출거래처',
+    workbookHeaders['매출거래처'],
+    masterData.salesClients
+  )
+
+  replaceSheet(
+    targetWorkbook,
+    '매입거래처',
+    workbookHeaders['매입거래처'],
+    masterData.purchaseClients
+  )
+
+  // 마스터가 들어간 상태에서 거래내역 변환
+  const transactionData =
+    getExistingTransactionData(
+      sourceWorkbook,
+      targetWorkbook
+    )
+
+  replaceSheet(
+    targetWorkbook,
+    '입출고내역',
+    workbookHeaders['입출고내역'],
+    transactionData.transactions
+  )
+
+  formatDateSheet(
+    targetWorkbook.Sheets[
+      '입출고내역'
+    ]
+  )
+
+  const dataFilePath =
+    getDataFilePath(dataFileName)
+
+  ensureDataFolders()
+
+  // 현재 사용 중인 데이터가 있으면
+  // 가져오기 전에 자동 백업
+  let beforeImportBackupFileName =
+    ''
+
+  if (
+    existsSync(dataFilePath)
+  ) {
+    const backupResult =
+      createBackup(
+        'before_import'
+      )
+
+    beforeImportBackupFileName =
+      backupResult.fileName
+  }
+
+  // 새 업무 데이터 저장
+  saveWorkbookSafely(
+    targetWorkbook,
+    dataFilePath
+  )
+
+  return {
+    success: true,
+    canceled: false,
+
+    sourceFilePath,
+
+    itemCount:
+      masterData.items.length,
+
+    salesClientCount:
+      masterData.salesClients.length,
+
+    purchaseClientCount:
+      masterData.purchaseClients.length,
+
+    transactionCount:
+      transactionData.transactions.length,
+
+    maxTransactionNo:
+      transactionData.maxTransactionNo,
+
+    normalizedReturnCount:
+      transactionData.normalizedReturnCount,
+
+    transactionTypeCounts:
+      transactionData.transactionTypeCounts,
+
+    missingItemCodes:
+      transactionData.missingItemCodes,
+
+    missingClientCodes:
+      transactionData.missingClientCodes,
+
+    beforeImportBackupFileName
+  }
 }
 
 function parseTransactionNo(value) {
@@ -531,7 +1148,7 @@ function formatDateSheet(sheet) {
 }
 
 function getLegacyTransactionData(masterWorkbook) {
-  const legacyFilePath = getLocalDataFilePath(legacyFileName)
+  const legacyFilePath = getDevLocalDataFilePath(legacyFileName)
   const legacyWorkbook = XLSX.readFile(legacyFilePath, { cellDates: true })
   const legacyRows = readLegacyTransactionRows(legacyWorkbook)
   const transactionNos = new Set()
@@ -644,7 +1261,7 @@ function importLegacyTransactions() {
 }
 
 function updateItem(originalCode, item) {
-  const dataFilePath = getLocalDataFilePath(dataFileName)
+  const dataFilePath = getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
     throw new Error('재고관리 데이터 파일이 없습니다.')
@@ -740,7 +1357,7 @@ function updateItem(originalCode, item) {
 }
 
 function deleteItem(code) {
-  const dataFilePath = getLocalDataFilePath(dataFileName)
+  const dataFilePath = getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
     throw new Error('재고관리 데이터 파일이 없습니다.')
@@ -809,7 +1426,7 @@ function getClientSheetName(clientType) {
 }
 
 function readClientsFromExcel(clientType) {
-  const dataFilePath = getLocalDataFilePath(dataFileName)
+  const dataFilePath = getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
     throw new Error('재고관리 데이터 파일이 없습니다.')
@@ -828,7 +1445,7 @@ function readClientsFromExcel(clientType) {
 }
 
 function addClient(clientType, client) {
-  const dataFilePath = getLocalDataFilePath(dataFileName)
+  const dataFilePath = getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
     throw new Error('재고관리 데이터 파일이 없습니다.')
@@ -905,7 +1522,7 @@ function isClientUsedInTransaction(transactionRows, clientType, code) {
 }
 
 function updateClient(clientType, originalCode, client) {
-  const dataFilePath = getLocalDataFilePath(dataFileName)
+  const dataFilePath = getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
     throw new Error('재고관리 데이터 파일이 없습니다.')
@@ -992,7 +1609,7 @@ function updateClient(clientType, originalCode, client) {
 }
 
 function deleteClient(clientType, code) {
-  const dataFilePath = getLocalDataFilePath(dataFileName)
+  const dataFilePath = getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
     throw new Error('재고관리 데이터 파일이 없습니다.')
@@ -1119,7 +1736,7 @@ function parseTransactionDate(value) {
 }
 
 function addTransaction(transaction) {
-  const dataFilePath = getLocalDataFilePath(dataFileName)
+  const dataFilePath = getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
     throw new Error('재고관리 데이터 파일이 없습니다.')
@@ -1337,7 +1954,7 @@ function addTransaction(transaction) {
 }
 
 function cancelTransaction(transactionNo, reason = '') {
-  const dataFilePath = getLocalDataFilePath(dataFileName)
+  const dataFilePath = getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
     throw new Error('재고관리 데이터 파일이 없습니다.')
@@ -1527,7 +2144,7 @@ function normalizeDateOnly(value) {
 }
 
 function checkInventory(referenceDate) {
-  const dataFilePath = getLocalDataFilePath(dataFileName)
+  const dataFilePath = getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
     throw new Error('재고관리 데이터 파일이 없습니다.')
@@ -1691,7 +2308,10 @@ function checkInventory(referenceDate) {
 }
 
 function getBackupFolderPath() {
-  return getLocalDataFilePath('backup')
+  return join(
+    getDataFolderPath(),
+    'backup'
+  )
 }
 
 function createBackupFileName(prefix = 'backup') {
@@ -1710,7 +2330,7 @@ function createBackupFileName(prefix = 'backup') {
 
 function createBackup(prefix = 'backup') {
   const dataFilePath =
-    getLocalDataFilePath(dataFileName)
+    getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
     throw new Error(
@@ -1927,7 +2547,7 @@ function restoreBackup(fileName) {
   }
 
   const dataFilePath =
-    getLocalDataFilePath(dataFileName)
+    getDataFilePath(dataFileName)
 
   // 백업 파일이 정상 Excel인지 먼저 확인
   XLSX.readFile(
@@ -1944,7 +2564,7 @@ function restoreBackup(fileName) {
   }
 
   const tempRestorePath =
-    getLocalDataFilePath(
+    getDataFilePath(
       '재고관리데이터.restore.tmp.xlsx'
     )
 
@@ -1997,7 +2617,7 @@ function restoreBackup(fileName) {
 }
 
 function getSettingsFilePath() {
-  return getLocalDataFilePath(settingsFileName)
+  return getDataFilePath(settingsFileName)
 }
 
 function getDefaultSettings() {
@@ -2042,13 +2662,10 @@ function getBackupSettings() {
 }
 
 function saveBackupSettings(settings) {
+  ensureDataFolders()
+
   const settingsFilePath =
     getSettingsFilePath()
-
-  mkdirSync(
-    join(process.cwd(), 'local-data'),
-    { recursive: true }
-  )
 
   const newSettings = {
     autoBackup:
@@ -2132,6 +2749,10 @@ app.whenReady().then(() => {
   ipcMain.handle('data-file:create', () => createDataFile())
   ipcMain.handle('legacy-master-data:import', () => importLegacyMasterData())
   ipcMain.handle('legacy-transactions:import', () => importLegacyTransactions())
+  ipcMain.handle(
+    'existing-excel:import',
+    () => importExistingExcel()
+  )
   ipcMain.handle('items:get', () => readItemsFromExcel())
   ipcMain.handle('items:add', (_, item) => addItem(item))
   ipcMain.handle('items:update', (_, originalCode, item) =>

@@ -76,6 +76,11 @@ const inventoryApi = {
   createDataFile: () =>
     ipcRenderer.invoke('data-file:create'),
 
+  importExistingExcel: () =>
+    ipcRenderer.invoke(
+      'existing-excel:import'
+    ),
+
   importLegacyMasterData: () =>
     ipcRenderer.invoke('legacy-master-data:import'),
 

@@ -4,10 +4,15 @@ import ItemManager from './components/ItemManager'
 import ClientManager from './components/ClientManager'
 import InventoryChecker from './components/InventoryChecker'
 import BackupManager from './components/BackupManager'
+import ExistingExcelImporter from './components/ExistingExcelImporter'
 
 function App() {
   return (
     <>
+      <ExistingExcelImporter />
+
+      <hr />  
+
       <BackupManager />
 
       <hr />
