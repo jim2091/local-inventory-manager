@@ -61,7 +61,7 @@ function InventoryChecker() {
           <h1>재고 검사</h1>
 
           <p>
-            입출고 내역으로 계산한 재고와
+            입출고 및 재고조정 내역으로 계산한 재고와
             현재 저장된 재고를 비교합니다.
           </p>
         </div>
@@ -74,7 +74,7 @@ function InventoryChecker() {
 
         <p className="inventory-check-description">
           기준일을 포함하여 이후의 입고,
-          출고, 출고반입 내역을 계산합니다.
+          출고, 출고반입, 재고조정 내역을 계산합니다.
         </p>
 
         <div className="inventory-check-controls">
@@ -102,7 +102,7 @@ function InventoryChecker() {
         <div
           className={
             result &&
-            result.mismatchCount === 0
+              result.mismatchCount === 0
               ? 'inventory-check-message success'
               : result
                 ? 'inventory-check-message warning'
@@ -186,6 +186,7 @@ function InventoryChecker() {
                     <th>입고</th>
                     <th>출고</th>
                     <th>출고반입</th>
+                    <th>재고조정</th>
                     <th>계산재고</th>
                     <th>현재재고</th>
                     <th>차이</th>
@@ -194,10 +195,10 @@ function InventoryChecker() {
 
                 <tbody>
                   {result.mismatches.length ===
-                  0 ? (
+                    0 ? (
                     <tr>
                       <td
-                        colSpan="9"
+                        colSpan="10"
                         className="inventory-all-match"
                       >
                         모든 품목의 재고가
@@ -239,6 +240,24 @@ function InventoryChecker() {
                           <td className="number-cell">
                             {formatNumber(
                               item.returnQuantity
+                            )}
+                          </td>
+
+                          <td
+                            className={
+                              item.adjustmentQuantity > 0
+                                ? 'number-cell adjustment-plus'
+                                : item.adjustmentQuantity < 0
+                                  ? 'number-cell adjustment-minus'
+                                  : 'number-cell'
+                            }
+                          >
+                            {item.adjustmentQuantity > 0
+                              ? '+'
+                              : ''}
+
+                            {formatNumber(
+                              item.adjustmentQuantity
                             )}
                           </td>
 

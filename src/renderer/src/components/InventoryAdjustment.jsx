@@ -27,11 +27,16 @@ function getToday() {
 const emptyForm = {
     date: getToday(),
     itemCode: '',
+    actualStock: '',
     quantity: '',
     reason: ''
 }
 
+
 function InventoryAdjustment() {
+    const [adjustmentMode, setAdjustmentMode] =
+        useState('actual')
+
     const [items, setItems] =
         useState([])
 
@@ -100,40 +105,46 @@ function InventoryAdjustment() {
                     .trim()
                     .toLowerCase()
 
-            const result =
-                items.filter((item) => {
-                    if (!keyword) {
-                        return true
-                    }
+            return items.filter((item) => {
+                if (!keyword) {
+                    return true
+                }
 
-                    const text = [
-                        item.code,
-                        item.name,
-                        item.brand,
-                        item.spec
-                    ]
-                        .join(' ')
-                        .toLowerCase()
+                const text = [
+                    item.code,
+                    item.name,
+                    item.brand,
+                    item.spec
+                ]
+                    .join(' ')
+                    .toLowerCase()
 
-                    return text.includes(keyword)
-                })
-
-            return result.slice(0, 20)
+                return text.includes(keyword)
+            })
         }, [
             items,
             itemSearch
         ])
 
-    const expectedStock =
-        selectedItem &&
-            form.quantity !== ''
+    const currentStock =
+        selectedItem
             ? Number(
-                selectedItem.currentStock ||
-                0
-            ) +
-            Number(
-                form.quantity || 0
+                selectedItem.currentStock || 0
             )
+            : null
+
+    const calculatedQuantity =
+        adjustmentMode === 'actual' &&
+            currentStock !== null &&
+            form.actualStock !== ''
+            ? Number(form.actualStock) -
+            currentStock
+            : Number(form.quantity || 0)
+
+    const expectedStock =
+        currentStock !== null
+            ? currentStock +
+            calculatedQuantity
             : null
 
     const selectItem = (item) => {
@@ -166,6 +177,74 @@ function InventoryAdjustment() {
             setMessage('')
             setResult(null)
 
+            if (!form.itemCode) {
+                setMessage(
+                    '품목을 선택해주세요.'
+                )
+                return
+            }
+
+            if (
+                adjustmentMode === 'actual' &&
+                form.actualStock === ''
+            ) {
+                setMessage(
+                    '실제 재고수량을 입력해주세요.'
+                )
+                return
+            }
+
+            if (
+                adjustmentMode === 'quantity' &&
+                form.quantity === ''
+            ) {
+                setMessage(
+                    '조정수량을 입력해주세요.'
+                )
+                return
+            }
+
+            if (!form.reason.trim()) {
+                setMessage(
+                    '조정 사유를 입력해주세요.'
+                )
+                return
+            }
+
+            if (
+                adjustmentMode === 'actual' &&
+                !Number.isInteger(
+                    Number(form.actualStock)
+                )
+            ) {
+                setMessage(
+                    '실제 재고수량은 정수로 입력해주세요.'
+                )
+                return
+            }
+
+            if (
+                adjustmentMode === 'quantity' &&
+                (
+                    !Number.isInteger(
+                        Number(form.quantity)
+                    ) ||
+                    Number(form.quantity) === 0
+                )
+            ) {
+                setMessage(
+                    '조정수량은 0이 아닌 정수로 입력해주세요.'
+                )
+                return
+            }
+
+            if (calculatedQuantity === 0) {
+                setMessage(
+                    '현재 재고와 실제 재고가 같아 조정할 수량이 없습니다.'
+                )
+                return
+            }
+
             try {
                 const response =
                     await window.inventoryApi
@@ -174,9 +253,7 @@ function InventoryAdjustment() {
                             itemCode:
                                 form.itemCode,
                             quantity:
-                                Number(
-                                    form.quantity
-                                ),
+                                calculatedQuantity,
                             reason:
                                 form.reason
                         })
@@ -341,9 +418,7 @@ function InventoryAdjustment() {
                         {selectedItem && (
                             <div className="adjustment-stock-info adjustment-full">
                                 <div>
-                                    <span>
-                                        현재재고
-                                    </span>
+                                    <span>현재재고</span>
 
                                     <strong>
                                         {formatNumber(
@@ -353,12 +428,28 @@ function InventoryAdjustment() {
                                 </div>
 
                                 <div>
-                                    <span>
-                                        조정 후 예상재고
-                                    </span>
+                                    <span>조정수량</span>
 
                                     <strong>
-                                        {expectedStock === null
+                                        {calculatedQuantity > 0
+                                            ? '+'
+                                            : ''}
+
+                                        {form.actualStock === '' &&
+                                            form.quantity === ''
+                                            ? '-'
+                                            : formatNumber(
+                                                calculatedQuantity
+                                            )}
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <span>조정 후 예상재고</span>
+
+                                    <strong>
+                                        {form.actualStock === '' &&
+                                            form.quantity === ''
                                             ? '-'
                                             : formatNumber(
                                                 expectedStock
@@ -368,20 +459,77 @@ function InventoryAdjustment() {
                             </div>
                         )}
 
-                        <div className="form-field">
-                            <label>
-                                조정수량
-                            </label>
+                        <div className="adjustment-mode adjustment-full">
+                            <button
+                                type="button"
+                                className={
+                                    adjustmentMode === 'actual'
+                                        ? 'adjustment-mode-button active'
+                                        : 'adjustment-mode-button'
+                                }
+                                onClick={() => {
+                                    setAdjustmentMode('actual')
 
-                            <input
-                                type="number"
-                                name="quantity"
-                                step="1"
-                                value={form.quantity}
-                                onChange={changeForm}
-                                placeholder="+3 또는 -2"
-                            />
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        quantity: ''
+                                    }))
+                                }}
+                            >
+                                실제 재고 입력
+                            </button>
+
+                            <button
+                                type="button"
+                                className={
+                                    adjustmentMode === 'quantity'
+                                        ? 'adjustment-mode-button active'
+                                        : 'adjustment-mode-button'
+                                }
+                                onClick={() => {
+                                    setAdjustmentMode('quantity')
+
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        actualStock: ''
+                                    }))
+                                }}
+                            >
+                                조정수량 직접 입력
+                            </button>
                         </div>
+
+                        {adjustmentMode === 'actual' ? (
+                            <div className="form-field">
+                                <label>
+                                    실제 재고수량
+                                </label>
+
+                                <input
+                                    type="number"
+                                    name="actualStock"
+                                    step="1"
+                                    value={form.actualStock}
+                                    onChange={changeForm}
+                                    placeholder="실제로 확인한 재고"
+                                />
+                            </div>
+                        ) : (
+                            <div className="form-field">
+                                <label>
+                                    조정수량
+                                </label>
+
+                                <input
+                                    type="number"
+                                    name="quantity"
+                                    step="1"
+                                    value={form.quantity}
+                                    onChange={changeForm}
+                                    placeholder="+3 또는 -2"
+                                />
+                            </div>
+                        )}
 
                         <div className="form-field adjustment-full">
                             <label>

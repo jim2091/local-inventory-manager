@@ -35,6 +35,19 @@ const inventoryApi = {
       reason
     ),
 
+    exportTransactions: (
+      transactions
+    ) =>
+      ipcRenderer.invoke(
+        'transactions:export',
+        transactions
+      ),
+
+    openExportFolder: () =>
+      ipcRenderer.invoke(
+        'export:folder:open'
+      ),
+
   checkInventory: (referenceDate) =>
     ipcRenderer.invoke(
       'inventory:check',

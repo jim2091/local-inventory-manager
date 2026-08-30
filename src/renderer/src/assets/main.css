@@ -2866,3 +2866,548 @@ tbody tr:hover td {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.adjustment-mode {
+  display: flex;
+  gap: 6px;
+
+  padding: 4px;
+
+  background: #eef1f5;
+  border-radius: 7px;
+}
+
+.content .adjustment-mode-button {
+  flex: 1;
+
+  padding: 8px 10px;
+
+  background: transparent;
+  color: #657080;
+
+  border: 0;
+  border-radius: 5px;
+
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.content .adjustment-mode-button.active {
+  background: #ffffff;
+  color: #355f8c;
+
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.adjustment-stock-info {
+  grid-template-columns:
+    repeat(3, 1fr);
+}
+
+.transaction-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.content .excel-export-button {
+  min-height: 40px;
+  padding: 0 15px;
+
+  background: #3f704d;
+  color: #ffffff;
+
+  border: 0;
+  border-radius: 6px;
+
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.content .excel-export-button:hover {
+  background: #365f42;
+}
+
+.content .excel-export-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (max-width: 700px) {
+  .transaction-header-actions {
+    flex-wrap: wrap;
+  }
+}
+
+.search-card {
+  overflow: visible;
+}
+
+.transaction-search-grid {
+  overflow: visible;
+}
+
+.transaction-search-grid .search-select {
+  position: relative;
+  z-index: 30;
+}
+
+.transaction-search-grid
+.search-result-list {
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.transaction-search-grid
+.search-result-item {
+  width: 100%;
+  text-align: left;
+}
+
+/* =========================
+   거래 취소 모달
+========================= */
+
+.cancel-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 20px;
+
+  background:
+    rgba(0, 0, 0, 0.35);
+}
+
+.cancel-modal {
+  width: 100%;
+  max-width: 520px;
+
+  padding: 22px;
+
+  background: #ffffff;
+  border-radius: 10px;
+
+  box-shadow:
+    0 10px 30px
+    rgba(0, 0, 0, 0.18);
+}
+
+.cancel-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin-bottom: 14px;
+}
+
+.cancel-modal-header h2 {
+  margin: 0;
+
+  color: #1f2937;
+  font-size: 20px;
+}
+
+.content .cancel-modal-close {
+  width: 34px;
+  height: 34px;
+
+  padding: 0;
+
+  background: transparent;
+  color: #687381;
+
+  border: 0;
+
+  font-size: 25px;
+  line-height: 1;
+}
+
+.cancel-modal-warning {
+  margin-bottom: 15px;
+  padding: 12px 14px;
+
+  background: #fff3f3;
+  color: #983838;
+
+  border: 1px solid #edcccc;
+  border-radius: 7px;
+
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cancel-modal-info {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
+  gap: 8px;
+
+  margin-bottom: 17px;
+}
+
+.cancel-modal-info > div {
+  padding: 10px 12px;
+
+  background: #f6f8fa;
+
+  border: 1px solid #e1e6eb;
+  border-radius: 6px;
+}
+
+.cancel-modal-info span {
+  display: block;
+
+  margin-bottom: 4px;
+
+  color: #7b8592;
+  font-size: 11px;
+}
+
+.cancel-modal-info strong {
+  color: #303843;
+  font-size: 13px;
+}
+
+.cancel-reason-field textarea {
+  width: 100%;
+
+  padding: 10px 11px;
+
+  background: #ffffff;
+  color: #222222;
+
+  border: 1px solid #cbd2da;
+  border-radius: 6px;
+
+  resize: vertical;
+}
+
+.cancel-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.content .cancel-confirm-button {
+  min-height: 40px;
+
+  padding: 0 16px;
+
+  background: #b34444;
+  color: #ffffff;
+
+  border: 0;
+  border-radius: 6px;
+
+  font-weight: 700;
+}
+
+.content .cancel-confirm-button:hover {
+  background: #9c3939;
+}
+
+@media (max-width: 550px) {
+  .cancel-modal-info {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================
+   취소 내역 표시
+========================= */
+
+.canceled-status-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+
+  min-width: 110px;
+}
+
+.cancel-reason-preview {
+  max-width: 150px;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  color: #7b6670;
+  font-size: 11px;
+}
+
+.content .cancel-detail-button {
+  padding: 0;
+
+  background: transparent;
+  color: #687b94;
+
+  border: 0;
+
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.content .cancel-detail-button:hover {
+  color: #3f5f84;
+}
+
+
+/* =========================
+   취소 상세 모달
+========================= */
+
+.cancel-detail-modal {
+  width: 100%;
+  max-width: 520px;
+
+  padding: 22px;
+
+  background: #ffffff;
+  border-radius: 10px;
+
+  box-shadow:
+    0 10px 30px
+    rgba(0, 0, 0, 0.18);
+}
+
+.cancel-detail-info {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
+  gap: 8px;
+
+  margin-bottom: 16px;
+}
+
+.cancel-detail-info > div {
+  padding: 10px 12px;
+
+  background: #f6f8fa;
+
+  border: 1px solid #e1e6eb;
+  border-radius: 6px;
+}
+
+.cancel-detail-info span,
+.cancel-detail-reason > span {
+  display: block;
+
+  margin-bottom: 4px;
+
+  color: #7b8592;
+  font-size: 11px;
+}
+
+.cancel-detail-info strong {
+  color: #303843;
+  font-size: 13px;
+}
+
+.cancel-detail-reason {
+  margin-top: 8px;
+}
+
+.cancel-detail-reason > div {
+  min-height: 70px;
+
+  padding: 12px;
+
+  background: #fff7f7;
+  color: #554247;
+
+  border: 1px solid #ead6d6;
+  border-radius: 6px;
+
+  font-size: 13px;
+  line-height: 1.6;
+
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 550px) {
+  .cancel-detail-info {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================
+   입출고 조회 테이블 너비 고정
+========================= */
+
+.transaction-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.transaction-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+/* 번호 */
+.transaction-table th:nth-child(1),
+.transaction-table td:nth-child(1) {
+  width: 65px;
+}
+
+/* 일자 */
+.transaction-table th:nth-child(2),
+.transaction-table td:nth-child(2) {
+  width: 100px;
+}
+
+/* 구분 */
+.transaction-table th:nth-child(3),
+.transaction-table td:nth-child(3) {
+  width: 85px;
+}
+
+/* 거래처 */
+.transaction-table th:nth-child(4),
+.transaction-table td:nth-child(4) {
+  width: 160px;
+}
+
+/* 품목 */
+.transaction-table th:nth-child(5),
+.transaction-table td:nth-child(5) {
+  width: 190px;
+}
+
+/* 수량 */
+.transaction-table th:nth-child(6),
+.transaction-table td:nth-child(6) {
+  width: 75px;
+}
+
+/* 단가 */
+.transaction-table th:nth-child(7),
+.transaction-table td:nth-child(7) {
+  width: 95px;
+}
+
+/* 공급가 */
+.transaction-table th:nth-child(8),
+.transaction-table td:nth-child(8) {
+  width: 105px;
+}
+
+/* 부가세 */
+.transaction-table th:nth-child(9),
+.transaction-table td:nth-child(9) {
+  width: 90px;
+}
+
+/* 합계 */
+.transaction-table th:nth-child(10),
+.transaction-table td:nth-child(10) {
+  width: 110px;
+}
+
+/* 상태 */
+.transaction-table th:nth-child(11),
+.transaction-table td:nth-child(11) {
+  width: 145px;
+}
+
+/* 관리 */
+.transaction-table th:nth-child(12),
+.transaction-table td:nth-child(12) {
+  width: 70px;
+}
+
+.transaction-table td {
+  overflow: hidden;
+}
+
+.transaction-table .table-main-text,
+.transaction-table .table-sub-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* =========================
+   조회 건수 선택
+========================= */
+
+.transaction-list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.page-size-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  padding: 4px;
+
+  background: #eef1f4;
+  border: 1px solid #dfe4e9;
+  border-radius: 7px;
+}
+
+.content .page-size-buttons .page-size-button {
+  min-width: 58px;
+
+  padding: 7px 11px;
+
+  background: transparent;
+  color: #6b7480;
+
+  border: 1px solid transparent;
+  border-radius: 5px;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.content .page-size-buttons .page-size-button:hover {
+  background: #e3e8ed;
+  color: #3e4a57;
+}
+
+/* 반드시 일반 버튼 스타일보다 아래에 둘 것 */
+.content .page-size-buttons .page-size-button.active {
+  background: #ffffff;
+  color: #2f6597;
+
+  border-color: #b9cee0;
+
+  box-shadow:
+    0 1px 4px
+    rgba(0, 0, 0, 0.12);
+
+  font-weight: 800;
+}
+
+.transaction-result-count {
+  color: #687381;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+html {
+  scrollbar-gutter: stable;
+}

@@ -1387,15 +1387,48 @@ function updateItem(originalCode, item) {
     throw new Error(`수정할 품목을 찾을 수 없습니다: ${oldCode}`)
   }
 
-  const transactionRows = readSheetRows(workbook, '입출고내역')
+  const transactionRows =
+    readSheetRows(
+      workbook,
+      '입출고내역'
+    )
 
-  const usedInTransaction = transactionRows.some(
-    (row) => normalizeCode(row['품목코드']) === oldCode
+  ensureWorkbookSheet(
+    workbook,
+    '재고조정'
   )
 
-  if (usedInTransaction && oldCode !== newCode) {
+  const adjustmentRows =
+    readSheetRows(
+      workbook,
+      '재고조정'
+    )
+
+  const usedInTransaction =
+    transactionRows.some(
+      (row) =>
+        normalizeCode(
+          row['품목코드']
+        ) === oldCode
+    )
+
+  const usedInAdjustment =
+    adjustmentRows.some(
+      (row) =>
+        normalizeCode(
+          row['품목코드']
+        ) === oldCode
+    )
+
+  if (
+    (
+      usedInTransaction ||
+      usedInAdjustment
+    ) &&
+    oldCode !== newCode
+  ) {
     throw new Error(
-      '입출고내역에 사용된 품목은 코드를 변경할 수 없습니다.'
+      '입출고내역 또는 재고조정내역에 사용된 품목은 코드를 변경할 수 없습니다.'
     )
   }
 
@@ -1473,15 +1506,45 @@ function deleteItem(code) {
     throw new Error(`삭제할 품목을 찾을 수 없습니다: ${targetCode}`)
   }
 
-  const transactionRows = readSheetRows(workbook, '입출고내역')
+  const transactionRows =
+    readSheetRows(
+      workbook,
+      '입출고내역'
+    )
 
-  const usedInTransaction = transactionRows.some(
-    (row) => normalizeCode(row['품목코드']) === targetCode
+  ensureWorkbookSheet(
+    workbook,
+    '재고조정'
   )
 
-  if (usedInTransaction) {
+  const adjustmentRows =
+    readSheetRows(
+      workbook,
+      '재고조정'
+    )
+
+  const usedInTransaction =
+    transactionRows.some(
+      (row) =>
+        normalizeCode(
+          row['품목코드']
+        ) === targetCode
+    )
+
+  const usedInAdjustment =
+    adjustmentRows.some(
+      (row) =>
+        normalizeCode(
+          row['품목코드']
+        ) === targetCode
+    )
+
+  if (
+    usedInTransaction ||
+    usedInAdjustment
+  ) {
     throw new Error(
-      '입출고내역에 사용된 품목은 삭제할 수 없습니다.'
+      '입출고내역 또는 재고조정내역에 사용된 품목은 삭제할 수 없습니다.'
     )
   }
 
@@ -2393,6 +2456,8 @@ function addInventoryAdjustment(
     )
   }
 
+  runAutoBackupIfNeeded()
+
   const workbook =
     XLSX.readFile(
       dataFilePath,
@@ -2925,6 +2990,16 @@ function checkInventory(referenceDate) {
     '입출고내역'
   )
 
+  ensureWorkbookSheet(
+    workbook,
+    '재고조정'
+  )
+
+  const adjustmentRows = readSheetRows(
+    workbook,
+    '재고조정'
+  )
+
   const result = []
 
   for (const item of itemRows) {
@@ -2965,6 +3040,7 @@ function checkInventory(referenceDate) {
     let inQuantity = 0
     let outQuantity = 0
     let returnQuantity = 0
+    let adjustmentQuantity = 0
 
     for (const transaction of transactionRows) {
       if (
@@ -3023,6 +3099,48 @@ function checkInventory(referenceDate) {
       }
     }
 
+    for (const adjustment of adjustmentRows) {
+      if (
+        normalizeCode(
+          adjustment['품목코드']
+        ) !== itemCode
+      ) {
+        continue
+      }
+
+      const adjustmentDate =
+        normalizeDateOnly(
+          adjustment['일자']
+        )
+
+      if (!adjustmentDate) {
+        continue
+      }
+
+      if (
+        adjustmentDate <
+        normalizedReferenceDate
+      ) {
+        continue
+      }
+
+      const quantity =
+        Number(
+          adjustment['조정수량']
+        )
+
+      if (
+        !Number.isFinite(quantity)
+      ) {
+        throw new Error(
+          `${adjustment['조정번호']}번 재고조정의 조정수량이 올바르지 않습니다.`
+        )
+      }
+
+      calculatedStock += quantity
+      adjustmentQuantity += quantity
+    }
+
     const difference =
       currentStock - calculatedStock
 
@@ -3035,6 +3153,7 @@ function checkInventory(referenceDate) {
         inQuantity,
         outQuantity,
         returnQuantity,
+        adjustmentQuantity,
 
         calculatedStock,
         currentStock,
@@ -3066,6 +3185,210 @@ function getBackupFolderPath() {
     getDataFolderPath(),
     'backup'
   )
+}
+
+function getExportFolderPath() {
+  return join(
+    getDataFolderPath(),
+    'export'
+  )
+}
+
+function createTransactionExportFileName() {
+  const now = new Date()
+
+  const year = now.getFullYear()
+  const month = String(
+    now.getMonth() + 1
+  ).padStart(2, '0')
+  const day = String(
+    now.getDate()
+  ).padStart(2, '0')
+
+  const hour = String(
+    now.getHours()
+  ).padStart(2, '0')
+  const minute = String(
+    now.getMinutes()
+  ).padStart(2, '0')
+  const second = String(
+    now.getSeconds()
+  ).padStart(2, '0')
+
+  return (
+    `입출고조회_${year}${month}${day}` +
+    `_${hour}${minute}${second}.xlsx`
+  )
+}
+
+function exportTransactions(
+  transactions
+) {
+  if (!Array.isArray(transactions)) {
+    throw new Error(
+      '내보낼 입출고 데이터가 올바르지 않습니다.'
+    )
+  }
+
+  if (transactions.length === 0) {
+    throw new Error(
+      '내보낼 입출고 내역이 없습니다.'
+    )
+  }
+
+  ensureDataFolders()
+
+  const exportFolderPath =
+    getExportFolderPath()
+
+  mkdirSync(
+    exportFolderPath,
+    { recursive: true }
+  )
+
+  const fileName =
+    createTransactionExportFileName()
+
+  const filePath =
+    join(
+      exportFolderPath,
+      fileName
+    )
+
+  const rows =
+    transactions.map(
+      (transaction) => ({
+        거래번호:
+          transaction.transactionNo ?? '',
+
+        일자:
+          transaction.date ?? '',
+
+        구분:
+          transaction.type ?? '',
+
+        거래처코드:
+          transaction.clientCode ?? '',
+
+        거래처명:
+          transaction.clientName ?? '',
+
+        품목코드:
+          transaction.itemCode ?? '',
+
+        품목명:
+          transaction.itemName ?? '',
+
+        수량:
+          Number(
+            transaction.quantity
+          ) || 0,
+
+        단가:
+          Number(
+            transaction.unitPrice
+          ) || 0,
+
+        공급가액:
+          Number(
+            transaction.supplyAmount
+          ) || 0,
+
+        부가세:
+          Number(
+            transaction.vat
+          ) || 0,
+
+        합계:
+          Number(
+            transaction.totalAmount
+          ) || 0,
+
+        상태:
+          transaction.canceled === 'Y'
+            ? '취소'
+            : '정상',
+
+        취소일시:
+          transaction.canceledAt ?? '',
+
+        취소사유:
+          transaction.cancelReason ?? ''
+      })
+    )
+
+  const worksheet =
+    XLSX.utils.json_to_sheet(
+      rows
+    )
+
+  worksheet['!cols'] = [
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 10 },
+    { wch: 16 },
+    { wch: 24 },
+    { wch: 18 },
+    { wch: 30 },
+    { wch: 10 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 10 },
+    { wch: 20 },
+    { wch: 30 }
+  ]
+
+  const workbook =
+    XLSX.utils.book_new()
+
+  XLSX.utils.book_append_sheet(
+    workbook,
+    worksheet,
+    '입출고조회'
+  )
+
+  XLSX.writeFile(
+    workbook,
+    filePath,
+    {
+      bookType: 'xlsx'
+    }
+  )
+
+  // 실제로 정상 Excel인지 한 번 검증
+  XLSX.readFile(
+    filePath,
+    {
+      cellDates: true
+    }
+  )
+
+  return {
+    success: true,
+    fileName,
+    filePath,
+    count: transactions.length
+  }
+}
+
+function openExportFolder() {
+  const exportFolderPath =
+    getExportFolderPath()
+
+  mkdirSync(
+    exportFolderPath,
+    { recursive: true }
+  )
+
+  shell.openPath(
+    exportFolderPath
+  )
+
+  return {
+    success: true
+  }
 }
 
 function createBackupFileName(prefix = 'backup') {
@@ -3569,18 +3892,19 @@ app.whenReady().then(() => {
       checkInventory(referenceDate)
   )
 
-  getInventoryAdjustments: () =>
-    ipcRenderer.invoke(
-      'inventory-adjustments:get'
-    ),
+  ipcMain.handle(
+    'inventory-adjustments:get',
+    () =>
+      readInventoryAdjustments()
+  )
 
-  addInventoryAdjustment: (
-    adjustment
-  ) =>
-    ipcRenderer.invoke(
-      'inventory-adjustments:add',
-      adjustment
-    ),
+  ipcMain.handle(
+    'inventory-adjustments:add',
+    (_, adjustment) =>
+      addInventoryAdjustment(
+        adjustment
+      )
+  )
 
   ipcMain.handle(
     'backup:create',
@@ -3612,6 +3936,20 @@ app.whenReady().then(() => {
   ipcMain.handle(
     'backup:folder:open',
     () => openBackupFolder()
+  )
+
+  ipcMain.handle(
+    'transactions:export',
+    (_, transactions) =>
+      exportTransactions(
+        transactions
+      )
+  )
+
+  ipcMain.handle(
+    'export:folder:open',
+    () =>
+      openExportFolder()
   )
 
   createWindow()
