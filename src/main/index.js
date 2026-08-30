@@ -34,6 +34,23 @@ const itemColumnMap = {
   브랜드명: 'brand'
 }
 
+const clientColumnMap = {
+  코드: 'code',
+  구분: 'category',
+  유형: 'type',
+  거래처명: 'name',
+  '사업자(주민)번호': 'businessNumber',
+  대표자명: 'representative',
+  사업장주소1: 'businessAddress',
+  업태: 'businessType',
+  종목: 'businessItem',
+  전화: 'phone',
+  팩스: 'fax',
+  휴대폰: 'mobile',
+  홈페이지주소: 'homepage',
+  실제주소1: 'actualAddress'
+}
+
 const dataFileName = '재고관리데이터.xlsx'
 const legacyFileName = '재고관리 프로그램_v1.3.xlsm'
 const tempDataFileName = '재고관리데이터.tmp.xlsx'
@@ -72,8 +89,51 @@ const workbookHeaders = {
     '규격',
     '브랜드명'
   ],
-  매출거래처: ['코드', '거래처명'],
-  매입거래처: ['코드', '거래처명'],
+  매출거래처: [
+    '코드',
+    '구분',
+    '유형',
+    '거래처명',
+    '사업자(주민)번호',
+    '대표자명',
+    '사업장주소1',
+    '업태',
+    '종목',
+    '전화',
+    '팩스',
+    '휴대폰',
+    '홈페이지주소',
+    '실제주소1'
+  ],
+
+  매입거래처: [
+    '코드',
+    '구분',
+    '유형',
+    '거래처명',
+    '사업자(주민)번호',
+    '대표자명',
+    '사업장주소1',
+    '업태',
+    '종목',
+    '전화',
+    '팩스',
+    '휴대폰',
+    '홈페이지주소',
+    '실제주소1'
+  ],
+  재고조정: [
+    '조정번호',
+    '일자',
+    '품목코드',
+    '품목명',
+    '조정전재고',
+    '조정수량',
+    '조정후재고',
+    '사유',
+    '등록일시'
+  ],
+
   설정: ['항목', '값']
 }
 
@@ -169,6 +229,35 @@ function replaceSheet(workbook, sheetName, headers, rows) {
   }
 
   workbook.Sheets[sheetName] = XLSX.utils.aoa_to_sheet([headers, ...rows])
+}
+
+function ensureWorkbookSheet(
+  workbook,
+  sheetName
+) {
+  if (workbook.Sheets[sheetName]) {
+    return
+  }
+
+  const headers =
+    workbookHeaders[sheetName]
+
+  if (!headers) {
+    throw new Error(
+      `알 수 없는 시트입니다: ${sheetName}`
+    )
+  }
+
+  const sheet =
+    XLSX.utils.aoa_to_sheet([
+      headers
+    ])
+
+  XLSX.utils.book_append_sheet(
+    workbook,
+    sheet,
+    sheetName
+  )
 }
 
 function saveWorkbookSafely(workbook, filePath) {
@@ -675,16 +764,20 @@ function getExistingMasterData(sourceWorkbook) {
       ),
 
     salesClients:
-      salesClientRows.map((row) => [
-        row['코드'] ?? '',
-        row['거래처명'] ?? ''
-      ]),
+      salesClientRows.map((row) =>
+        workbookHeaders['매출거래처'].map(
+          (header) =>
+            row[header] ?? ''
+        )
+      ),
 
     purchaseClients:
-      purchaseClientRows.map((row) => [
-        row['코드'] ?? '',
-        row['거래처명'] ?? ''
-      ])
+      purchaseClientRows.map((row) =>
+        workbookHeaders['매입거래처'].map(
+          (header) =>
+            row[header] ?? ''
+        )
+      )
   }
 }
 
@@ -1426,60 +1519,229 @@ function getClientSheetName(clientType) {
 }
 
 function readClientsFromExcel(clientType) {
-  const dataFilePath = getDataFilePath(dataFileName)
+  const dataFilePath =
+    getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
-    throw new Error('재고관리 데이터 파일이 없습니다.')
+    throw new Error(
+      '재고관리 데이터 파일이 없습니다.'
+    )
   }
 
-  const workbook = XLSX.readFile(dataFilePath, { cellDates: true })
-  const sheetName = getClientSheetName(clientType)
-  const rows = readSheetRows(workbook, sheetName)
+  const workbook =
+    XLSX.readFile(
+      dataFilePath,
+      {
+        cellDates: true
+      }
+    )
+
+  const sheetName =
+    getClientSheetName(clientType)
+
+  const rows =
+    readSheetRows(
+      workbook,
+      sheetName
+    )
 
   return rows
-    .map((row) => ({
-      code: normalizeCode(row['코드']),
-      name: String(row['거래처명'] ?? '').trim()
-    }))
-    .filter((client) => client.code || client.name)
+    .map((row) => {
+      const client = {}
+
+      for (
+        const [sourceKey, targetKey]
+        of Object.entries(clientColumnMap)
+      ) {
+        const value =
+          row[sourceKey] ?? ''
+
+        client[targetKey] =
+          typeof value === 'string'
+            ? value.trim()
+            : value
+      }
+
+      client.code =
+        normalizeCode(client.code)
+
+      return client
+    })
+    .filter(
+      (client) =>
+        client.code ||
+        client.name
+    )
 }
 
-function addClient(clientType, client) {
-  const dataFilePath = getDataFilePath(dataFileName)
+function createClientRow(client) {
+  return {
+    코드:
+      normalizeCode(client.code),
+
+    구분:
+      String(
+        client.category ?? ''
+      ).trim(),
+
+    유형:
+      String(
+        client.type ?? ''
+      ).trim(),
+
+    거래처명:
+      String(
+        client.name ?? ''
+      ).trim(),
+
+    '사업자(주민)번호':
+      String(
+        client.businessNumber ?? ''
+      ).trim(),
+
+    대표자명:
+      String(
+        client.representative ?? ''
+      ).trim(),
+
+    사업장주소1:
+      String(
+        client.businessAddress ?? ''
+      ).trim(),
+
+    업태:
+      String(
+        client.businessType ?? ''
+      ).trim(),
+
+    종목:
+      String(
+        client.businessItem ?? ''
+      ).trim(),
+
+    전화:
+      String(
+        client.phone ?? ''
+      ).trim(),
+
+    팩스:
+      String(
+        client.fax ?? ''
+      ).trim(),
+
+    휴대폰:
+      String(
+        client.mobile ?? ''
+      ).trim(),
+
+    홈페이지주소:
+      String(
+        client.homepage ?? ''
+      ).trim(),
+
+    실제주소1:
+      String(
+        client.actualAddress ?? ''
+      ).trim()
+  }
+}
+
+function clientRowToArray(
+  row,
+  sheetName
+) {
+  return workbookHeaders[
+    sheetName
+  ].map(
+    (header) =>
+      row[header] ?? ''
+  )
+}
+
+function addClient(
+  clientType,
+  client
+) {
+  const dataFilePath =
+    getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
-    throw new Error('재고관리 데이터 파일이 없습니다.')
+    throw new Error(
+      '재고관리 데이터 파일이 없습니다.'
+    )
   }
 
-  const workbook = XLSX.readFile(dataFilePath, { cellDates: true })
-  const sheetName = getClientSheetName(clientType)
-  const rows = readSheetRows(workbook, sheetName)
+  const workbook =
+    XLSX.readFile(
+      dataFilePath,
+      {
+        cellDates: true
+      }
+    )
 
-  const code = normalizeCode(client.code)
-  const name = String(client.name ?? '').trim()
+  const sheetName =
+    getClientSheetName(clientType)
+
+  const rows =
+    readSheetRows(
+      workbook,
+      sheetName
+    )
+
+  const code =
+    normalizeCode(client.code)
+
+  const name =
+    String(
+      client.name ?? ''
+    ).trim()
 
   if (!code) {
-    throw new Error('거래처 코드를 입력해주세요.')
+    throw new Error(
+      '거래처 코드를 입력해주세요.'
+    )
   }
 
   if (!name) {
-    throw new Error('거래처명을 입력해주세요.')
+    throw new Error(
+      '거래처명을 입력해주세요.'
+    )
   }
 
-  const duplicate = rows.some(
-    (row) => normalizeCode(row['코드']) === code
-  )
+  const duplicate =
+    rows.some(
+      (row) =>
+        normalizeCode(
+          row['코드']
+        ) === code
+    )
 
   if (duplicate) {
-    throw new Error(`이미 존재하는 거래처 코드입니다: ${code}`)
+    throw new Error(
+      `이미 존재하는 거래처 코드입니다: ${code}`
+    )
   }
 
+  const newClient =
+    createClientRow({
+      ...client,
+      code,
+      name
+    })
+
   const newRows = [
-    ...rows.map((row) => [
-      row['코드'] ?? '',
-      row['거래처명'] ?? ''
-    ]),
-    [code, name]
+    ...rows.map(
+      (row) =>
+        clientRowToArray(
+          row,
+          sheetName
+        )
+    ),
+
+    clientRowToArray(
+      newClient,
+      sheetName
+    )
   ]
 
   replaceSheet(
@@ -1489,13 +1751,44 @@ function addClient(clientType, client) {
     newRows
   )
 
-  saveWorkbookSafely(workbook, dataFilePath)
+  saveWorkbookSafely(
+    workbook,
+    dataFilePath
+  )
 
   return {
     success: true,
+
     client: {
       code,
-      name
+      category:
+        newClient['구분'],
+      type:
+        newClient['유형'],
+      name:
+        newClient['거래처명'],
+      businessNumber:
+        newClient[
+          '사업자(주민)번호'
+        ],
+      representative:
+        newClient['대표자명'],
+      businessAddress:
+        newClient['사업장주소1'],
+      businessType:
+        newClient['업태'],
+      businessItem:
+        newClient['종목'],
+      phone:
+        newClient['전화'],
+      fax:
+        newClient['팩스'],
+      mobile:
+        newClient['휴대폰'],
+      homepage:
+        newClient['홈페이지주소'],
+      actualAddress:
+        newClient['실제주소1']
     }
   }
 }
@@ -1521,74 +1814,139 @@ function isClientUsedInTransaction(transactionRows, clientType, code) {
   })
 }
 
-function updateClient(clientType, originalCode, client) {
-  const dataFilePath = getDataFilePath(dataFileName)
+function updateClient(
+  clientType,
+  originalCode,
+  client
+) {
+  const dataFilePath =
+    getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
-    throw new Error('재고관리 데이터 파일이 없습니다.')
+    throw new Error(
+      '재고관리 데이터 파일이 없습니다.'
+    )
   }
 
-  const workbook = XLSX.readFile(dataFilePath, { cellDates: true })
-  const sheetName = getClientSheetName(clientType)
-  const rows = readSheetRows(workbook, sheetName)
+  const workbook =
+    XLSX.readFile(
+      dataFilePath,
+      {
+        cellDates: true
+      }
+    )
 
-  const oldCode = normalizeCode(originalCode)
-  const newCode = normalizeCode(client.code)
-  const name = String(client.name ?? '').trim()
+  const sheetName =
+    getClientSheetName(clientType)
+
+  const rows =
+    readSheetRows(
+      workbook,
+      sheetName
+    )
+
+  const oldCode =
+    normalizeCode(
+      originalCode
+    )
+
+  const newCode =
+    normalizeCode(
+      client.code
+    )
+
+  const name =
+    String(
+      client.name ?? ''
+    ).trim()
 
   if (!oldCode) {
-    throw new Error('수정할 거래처 코드가 없습니다.')
+    throw new Error(
+      '수정할 거래처 코드가 없습니다.'
+    )
   }
 
   if (!newCode) {
-    throw new Error('거래처 코드를 입력해주세요.')
+    throw new Error(
+      '거래처 코드를 입력해주세요.'
+    )
   }
 
   if (!name) {
-    throw new Error('거래처명을 입력해주세요.')
+    throw new Error(
+      '거래처명을 입력해주세요.'
+    )
   }
 
-  const targetIndex = rows.findIndex(
-    (row) => normalizeCode(row['코드']) === oldCode
-  )
+  const targetIndex =
+    rows.findIndex(
+      (row) =>
+        normalizeCode(
+          row['코드']
+        ) === oldCode
+    )
 
   if (targetIndex < 0) {
-    throw new Error(`수정할 거래처를 찾을 수 없습니다: ${oldCode}`)
+    throw new Error(
+      `수정할 거래처를 찾을 수 없습니다: ${oldCode}`
+    )
   }
 
-  const transactionRows = readSheetRows(workbook, '입출고내역')
+  const transactionRows =
+    readSheetRows(
+      workbook,
+      '입출고내역'
+    )
 
-  const usedInTransaction = isClientUsedInTransaction(
-    transactionRows,
-    clientType,
-    oldCode
-  )
+  const usedInTransaction =
+    isClientUsedInTransaction(
+      transactionRows,
+      clientType,
+      oldCode
+    )
 
-  if (usedInTransaction && oldCode !== newCode) {
+  if (
+    usedInTransaction &&
+    oldCode !== newCode
+  ) {
     throw new Error(
       '입출고내역에 사용된 거래처는 코드를 변경할 수 없습니다.'
     )
   }
 
-  const duplicate = rows.some(
-    (row, index) =>
-      index !== targetIndex &&
-      normalizeCode(row['코드']) === newCode
-  )
+  const duplicate =
+    rows.some(
+      (row, index) =>
+        index !== targetIndex &&
+        normalizeCode(
+          row['코드']
+        ) === newCode
+    )
 
   if (duplicate) {
-    throw new Error(`이미 존재하는 거래처 코드입니다: ${newCode}`)
+    throw new Error(
+      `이미 존재하는 거래처 코드입니다: ${newCode}`
+    )
   }
 
-  rows[targetIndex] = {
-    코드: newCode,
-    거래처명: name
-  }
+  const updatedClient =
+    createClientRow({
+      ...client,
+      code: newCode,
+      name
+    })
 
-  const newRows = rows.map((row) => [
-    row['코드'] ?? '',
-    row['거래처명'] ?? ''
-  ])
+  rows[targetIndex] =
+    updatedClient
+
+  const newRows =
+    rows.map(
+      (row) =>
+        clientRowToArray(
+          row,
+          sheetName
+        )
+    )
 
   replaceSheet(
     workbook,
@@ -1597,13 +1955,52 @@ function updateClient(clientType, originalCode, client) {
     newRows
   )
 
-  saveWorkbookSafely(workbook, dataFilePath)
+  saveWorkbookSafely(
+    workbook,
+    dataFilePath
+  )
 
   return {
     success: true,
+
     client: {
       code: newCode,
-      name
+      category:
+        updatedClient['구분'],
+      type:
+        updatedClient['유형'],
+      name:
+        updatedClient['거래처명'],
+      businessNumber:
+        updatedClient[
+          '사업자(주민)번호'
+        ],
+      representative:
+        updatedClient[
+          '대표자명'
+        ],
+      businessAddress:
+        updatedClient[
+          '사업장주소1'
+        ],
+      businessType:
+        updatedClient['업태'],
+      businessItem:
+        updatedClient['종목'],
+      phone:
+        updatedClient['전화'],
+      fax:
+        updatedClient['팩스'],
+      mobile:
+        updatedClient['휴대폰'],
+      homepage:
+        updatedClient[
+          '홈페이지주소'
+        ],
+      actualAddress:
+        updatedClient[
+          '실제주소1'
+        ]
     }
   }
 }
@@ -1649,10 +2046,14 @@ function deleteClient(clientType, code) {
 
   rows.splice(targetIndex, 1)
 
-  const newRows = rows.map((row) => [
-    row['코드'] ?? '',
-    row['거래처명'] ?? ''
-  ])
+  const newRows =
+    rows.map(
+      (row) =>
+        clientRowToArray(
+          row,
+          sheetName
+        )
+    )
 
   replaceSheet(
     workbook,
@@ -1681,6 +2082,33 @@ function getNextTransactionNo(transactionRows) {
   }
 
   return maxTransactionNo + 1
+}
+
+function getNextAdjustmentNo(
+  adjustmentRows
+) {
+  let maxAdjustmentNo = 0
+
+  for (
+    const row of adjustmentRows
+  ) {
+    const adjustmentNo =
+      Number(row['조정번호'])
+
+    if (
+      Number.isFinite(
+        adjustmentNo
+      )
+    ) {
+      maxAdjustmentNo =
+        Math.max(
+          maxAdjustmentNo,
+          adjustmentNo
+        )
+    }
+  }
+
+  return maxAdjustmentNo + 1
 }
 
 function parsePositiveNumber(value, fieldName) {
@@ -1951,6 +2379,332 @@ function addTransaction(transaction) {
       transactionType === '출고' &&
       newStock < 0
   }
+}
+
+function addInventoryAdjustment(
+  adjustment
+) {
+  const dataFilePath =
+    getDataFilePath(dataFileName)
+
+  if (!existsSync(dataFilePath)) {
+    throw new Error(
+      '재고관리 데이터 파일이 없습니다.'
+    )
+  }
+
+  const workbook =
+    XLSX.readFile(
+      dataFilePath,
+      {
+        cellDates: true
+      }
+    )
+
+  ensureWorkbookSheet(
+    workbook,
+    '재고조정'
+  )
+
+  const itemRows =
+    readSheetRows(
+      workbook,
+      '품목'
+    )
+
+  const adjustmentRows =
+    readSheetRows(
+      workbook,
+      '재고조정'
+    )
+
+  const itemCode =
+    normalizeCode(
+      adjustment.itemCode
+    )
+
+  if (!itemCode) {
+    throw new Error(
+      '품목을 선택해주세요.'
+    )
+  }
+
+  const itemIndex =
+    itemRows.findIndex(
+      (row) =>
+        normalizeCode(
+          row['코드']
+        ) === itemCode
+    )
+
+  if (itemIndex < 0) {
+    throw new Error(
+      `품목을 찾을 수 없습니다: ${itemCode}`
+    )
+  }
+
+  const item =
+    itemRows[itemIndex]
+
+  const currentStock =
+    item['현재재고량'] === ''
+      ? 0
+      : Number(
+          item['현재재고량']
+        )
+
+  if (
+    !Number.isFinite(
+      currentStock
+    )
+  ) {
+    throw new Error(
+      `${itemCode} 품목의 현재재고량이 올바르지 않습니다.`
+    )
+  }
+
+  const adjustmentQuantity =
+    Number(
+      adjustment.quantity
+    )
+
+  if (
+    !Number.isFinite(
+      adjustmentQuantity
+    ) ||
+    adjustmentQuantity === 0
+  ) {
+    throw new Error(
+      '조정수량은 0이 아닌 숫자여야 합니다.'
+    )
+  }
+
+  if (
+    !Number.isInteger(
+      adjustmentQuantity
+    )
+  ) {
+    throw new Error(
+      '조정수량은 정수로 입력해주세요.'
+    )
+  }
+
+  const reason =
+    String(
+      adjustment.reason ?? ''
+    ).trim()
+
+  if (!reason) {
+    throw new Error(
+      '재고 조정 사유를 입력해주세요.'
+    )
+  }
+
+  const adjustmentDate =
+    parseTransactionDate(
+      adjustment.date
+    )
+
+  const newStock =
+    currentStock +
+    adjustmentQuantity
+
+  const adjustmentNo =
+    getNextAdjustmentNo(
+      adjustmentRows
+    )
+
+  const newAdjustment = {
+    조정번호:
+      adjustmentNo,
+
+    일자:
+      adjustmentDate,
+
+    품목코드:
+      itemCode,
+
+    품목명:
+      item['품목명'] ?? '',
+
+    조정전재고:
+      currentStock,
+
+    조정수량:
+      adjustmentQuantity,
+
+    조정후재고:
+      newStock,
+
+    사유:
+      reason,
+
+    등록일시:
+      new Date()
+  }
+
+  const newAdjustmentRows = [
+    ...adjustmentRows.map(
+      (row) =>
+        workbookHeaders[
+          '재고조정'
+        ].map(
+          (header) =>
+            row[header] ?? ''
+        )
+    ),
+
+    workbookHeaders[
+      '재고조정'
+    ].map(
+      (header) =>
+        newAdjustment[
+          header
+        ] ?? ''
+    )
+  ]
+
+  itemRows[itemIndex] = {
+    ...item,
+    현재재고량:
+      newStock
+  }
+
+  const newItemRows =
+    itemRows.map(
+      (row) =>
+        workbookHeaders[
+          '품목'
+        ].map(
+          (header) =>
+            row[header] ?? ''
+        )
+    )
+
+  replaceSheet(
+    workbook,
+    '재고조정',
+    workbookHeaders[
+      '재고조정'
+    ],
+    newAdjustmentRows
+  )
+
+  replaceSheet(
+    workbook,
+    '품목',
+    workbookHeaders['품목'],
+    newItemRows
+  )
+
+  saveWorkbookSafely(
+    workbook,
+    dataFilePath
+  )
+
+  return {
+    success: true,
+
+    adjustment: {
+      adjustmentNo,
+      date:
+        adjustment.date,
+
+      itemCode,
+
+      itemName:
+        item['품목명'] ?? '',
+
+      previousStock:
+        currentStock,
+
+      quantity:
+        adjustmentQuantity,
+
+      currentStock:
+        newStock,
+
+      reason
+    },
+
+    stockWarning:
+      newStock < 0
+  }
+}
+
+function readInventoryAdjustments() {
+  const dataFilePath =
+    getDataFilePath(dataFileName)
+
+  if (!existsSync(dataFilePath)) {
+    throw new Error(
+      '재고관리 데이터 파일이 없습니다.'
+    )
+  }
+
+  const workbook =
+    XLSX.readFile(
+      dataFilePath,
+      {
+        cellDates: true
+      }
+    )
+
+  ensureWorkbookSheet(
+    workbook,
+    '재고조정'
+  )
+
+  const rows =
+    readSheetRows(
+      workbook,
+      '재고조정'
+    )
+
+  return rows
+    .map((row) => ({
+      adjustmentNo:
+        row['조정번호'] ?? '',
+
+      date:
+        normalizeDateOnly(
+          row['일자']
+        ),
+
+      itemCode:
+        row['품목코드'] ?? '',
+
+      itemName:
+        row['품목명'] ?? '',
+
+      previousStock:
+        row['조정전재고'] ?? '',
+
+      quantity:
+        row['조정수량'] ?? '',
+
+      currentStock:
+        row['조정후재고'] ?? '',
+
+      reason:
+        row['사유'] ?? '',
+
+      createdAt:
+        row['등록일시'] ?? ''
+    }))
+    .filter(
+      (row) =>
+        row.adjustmentNo !== ''
+    )
+    .sort(
+      (a, b) =>
+        Number(
+          b.adjustmentNo
+        ) -
+        Number(
+          a.adjustmentNo
+        )
+    )
 }
 
 function cancelTransaction(transactionNo, reason = '') {
@@ -2706,6 +3460,16 @@ function openBackupFolder() {
   }
 }
 
+function getDataStatus() {
+  const dataFilePath =
+    getDataFilePath(dataFileName)
+
+  return {
+    exists: existsSync(dataFilePath),
+    dataFilePath
+  }
+}
+
 
 function createWindow() {
   // Create the browser window.
@@ -2746,6 +3510,10 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  ipcMain.handle(
+    'data-file:status',
+    () => getDataStatus()
+  )
   ipcMain.handle('data-file:create', () => createDataFile())
   ipcMain.handle('legacy-master-data:import', () => importLegacyMasterData())
   ipcMain.handle('legacy-transactions:import', () => importLegacyTransactions())
@@ -2800,6 +3568,19 @@ app.whenReady().then(() => {
     (_, referenceDate) =>
       checkInventory(referenceDate)
   )
+
+  getInventoryAdjustments: () =>
+    ipcRenderer.invoke(
+      'inventory-adjustments:get'
+    ),
+
+  addInventoryAdjustment: (
+    adjustment
+  ) =>
+    ipcRenderer.invoke(
+      'inventory-adjustments:add',
+      adjustment
+    ),
 
   ipcMain.handle(
     'backup:create',

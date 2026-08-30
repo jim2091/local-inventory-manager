@@ -41,6 +41,19 @@ const inventoryApi = {
       referenceDate
     ),
 
+  getInventoryAdjustments: () =>
+    ipcRenderer.invoke(
+      'inventory-adjustments:get'
+    ),
+
+  addInventoryAdjustment: (
+    adjustment
+  ) =>
+    ipcRenderer.invoke(
+      'inventory-adjustments:add',
+      adjustment
+    ),
+
   createBackup: () =>
     ipcRenderer.invoke(
       'backup:create'
@@ -71,6 +84,11 @@ const inventoryApi = {
   openBackupFolder: () =>
     ipcRenderer.invoke(
       'backup:folder:open'
+    ),
+
+  getDataStatus: () =>
+    ipcRenderer.invoke(
+      'data-file:status'
     ),
 
   createDataFile: () =>
