@@ -11,6 +11,16 @@ const emptySearch = {
     type: '',
     clientKeyword: '',
     itemKeyword: '',
+
+    minQuantity: '',
+    maxQuantity: '',
+
+    minUnitPrice: '',
+    maxUnitPrice: '',
+
+    minTotalAmount: '',
+    maxTotalAmount: '',
+
     includeCanceled: false
 }
 
@@ -27,6 +37,11 @@ function formatDate(date) {
 }
 
 function TransactionList() {
+    const [
+        showAdvancedFilters,
+        setShowAdvancedFilters
+    ] = useState(false)
+
     const [cancelTarget, setCancelTarget] =
         useState(null)
 
@@ -82,6 +97,12 @@ function TransactionList() {
 
     const [pageSize, setPageSize] =
         useState(100)
+
+    const [sortConfig, setSortConfig] =
+        useState({
+            key: 'date',
+            direction: 'desc'
+        })
 
     const loadTransactions =
         useCallback(() => {
@@ -487,28 +508,204 @@ function TransactionList() {
                         }
                     }
 
-                    return true
-                })
-                .sort((a, b) => {
-                    if (a.date !== b.date) {
-                        return b.date.localeCompare(
-                            a.date
-                        )
+                    const quantity =
+                        Number(
+                            transaction.quantity
+                        ) || 0
+
+                    const unitPrice =
+                        Number(
+                            transaction.unitPrice
+                        ) || 0
+
+                    const totalAmount =
+                        Number(
+                            transaction.totalAmount
+                        ) || 0
+
+                    if (
+                        search.minQuantity !== '' &&
+                        quantity <
+                        Number(search.minQuantity)
+                    ) {
+                        return false
                     }
 
-                    return (
-                        Number(b.transactionNo) -
-                        Number(a.transactionNo)
-                    )
+                    if (
+                        search.maxQuantity !== '' &&
+                        quantity >
+                        Number(search.maxQuantity)
+                    ) {
+                        return false
+                    }
+
+                    if (
+                        search.minUnitPrice !== '' &&
+                        unitPrice <
+                        Number(search.minUnitPrice)
+                    ) {
+                        return false
+                    }
+
+                    if (
+                        search.maxUnitPrice !== '' &&
+                        unitPrice >
+                        Number(search.maxUnitPrice)
+                    ) {
+                        return false
+                    }
+
+                    if (
+                        search.minTotalAmount !== '' &&
+                        totalAmount <
+                        Number(search.minTotalAmount)
+                    ) {
+                        return false
+                    }
+
+                    if (
+                        search.maxTotalAmount !== '' &&
+                        totalAmount >
+                        Number(search.maxTotalAmount)
+                    ) {
+                        return false
+                    }
+
+                    return true
+
+                    return true
                 })
         }, [
             transactions,
             search
         ])
 
+    const sortedTransactions =
+        useMemo(() => {
+            const sorted = [
+                ...filteredTransactions
+            ]
+
+            const numericKeys =
+                new Set([
+                    'transactionNo',
+                    'quantity',
+                    'unitPrice',
+                    'supplyAmount',
+                    'vat',
+                    'totalAmount'
+                ])
+
+            const getSortValue = (
+                transaction
+            ) => {
+                if (
+                    sortConfig.key === 'status'
+                ) {
+                    return transaction.canceled === 'Y'
+                        ? '취소'
+                        : '정상'
+                }
+
+                return transaction[
+                    sortConfig.key
+                ] ?? ''
+            }
+
+            sorted.sort((a, b) => {
+                const aValue =
+                    getSortValue(a)
+
+                const bValue =
+                    getSortValue(b)
+
+                let comparison = 0
+
+                if (
+                    numericKeys.has(
+                        sortConfig.key
+                    )
+                ) {
+                    comparison =
+                        Number(aValue) -
+                        Number(bValue)
+                } else {
+                    comparison =
+                        String(aValue)
+                            .localeCompare(
+                                String(bValue),
+                                'ko'
+                            )
+                }
+
+                if (
+                    comparison !== 0
+                ) {
+                    return sortConfig.direction ===
+                        'asc'
+                        ? comparison
+                        : -comparison
+                }
+
+                // 값이 같으면 항상 거래번호 큰 것 우선
+                return (
+                    Number(
+                        b.transactionNo
+                    ) -
+                    Number(
+                        a.transactionNo
+                    )
+                )
+            })
+
+            return sorted
+        }, [
+            filteredTransactions,
+            sortConfig
+        ])
+
+    const changeSort = (key) => {
+        setSortConfig((prev) => {
+            if (prev.key === key) {
+                return {
+                    key,
+                    direction:
+                        prev.direction === 'asc'
+                            ? 'desc'
+                            : 'asc'
+                }
+            }
+
+            return {
+                key,
+                direction: 'asc'
+            }
+        })
+
+        setPage(1)
+    }
+
+    const getSortMark = (key) => {
+        if (
+            sortConfig.key !== key
+        ) {
+            return ''
+        }
+
+        return sortConfig.direction === 'asc'
+            ? ' ▲'
+            : ' ▼'
+    }
+
     const summary = useMemo(() => {
         return filteredTransactions.reduce(
             (acc, transaction) => {
+                if (
+                    transaction.canceled === 'Y'
+                ) {
+                    return acc
+                }
+
                 acc.supply +=
                     Number(
                         transaction.supplyAmount
@@ -543,7 +740,7 @@ function TransactionList() {
             : Math.max(
                 1,
                 Math.ceil(
-                    filteredTransactions.length /
+                    sortedTransactions.length /
                     pageSize
                 )
             )
@@ -556,8 +753,8 @@ function TransactionList() {
 
     const pageTransactions =
         isShowAll
-            ? filteredTransactions
-            : filteredTransactions.slice(
+            ? sortedTransactions
+            : sortedTransactions.slice(
                 (currentPage - 1) *
                 pageSize,
                 currentPage *
@@ -648,7 +845,7 @@ function TransactionList() {
             setMessage('')
 
             if (
-                filteredTransactions.length === 0
+                sortedTransactions.length === 0
             ) {
                 setMessage(
                     '내보낼 입출고 내역이 없습니다.'
@@ -660,7 +857,7 @@ function TransactionList() {
                 const result =
                     await window.inventoryApi
                         .exportTransactions(
-                            filteredTransactions
+                            sortedTransactions
                         )
 
                 setMessage(
@@ -798,53 +995,87 @@ function TransactionList() {
             </div>
 
             <div className="search-card">
-                <div className="quick-date-buttons">
-                    <button
-                        type="button"
-                        onClick={() =>
-                            setQuickDate('today')
-                        }
-                    >
-                        오늘
-                    </button>
+                <div className="search-toolbar">
+                    <div className="quick-date-buttons">
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setQuickDate('today')
+                            }
+                        >
+                            오늘
+                        </button>
 
-                    <button
-                        type="button"
-                        onClick={() =>
-                            setQuickDate('week')
-                        }
-                    >
-                        이번 주
-                    </button>
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setQuickDate('week')
+                            }
+                        >
+                            이번 주
+                        </button>
 
-                    <button
-                        type="button"
-                        onClick={() =>
-                            setQuickDate('month')
-                        }
-                    >
-                        이번 달
-                    </button>
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setQuickDate('month')
+                            }
+                        >
+                            이번 달
+                        </button>
 
-                    <button
-                        type="button"
-                        onClick={() =>
-                            setQuickDate(
-                                'last-month'
-                            )
-                        }
-                    >
-                        지난달
-                    </button>
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setQuickDate(
+                                    'last-month'
+                                )
+                            }
+                        >
+                            지난달
+                        </button>
 
-                    <button
-                        type="button"
-                        onClick={() =>
-                            setQuickDate('all')
-                        }
-                    >
-                        전체
-                    </button>
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setQuickDate('all')
+                            }
+                        >
+                            전체
+                        </button>
+                    </div>
+
+                    <div className="search-toolbar-actions">
+                        <button
+                            type="button"
+                            className={
+                                showAdvancedFilters
+                                    ? 'advanced-filter-toggle active'
+                                    : 'advanced-filter-toggle'
+                            }
+                            onClick={() =>
+                                setShowAdvancedFilters(
+                                    (prev) => !prev
+                                )
+                            }
+                        >
+                            상세 조건
+
+                            <span>
+                                {showAdvancedFilters
+                                    ? '▲'
+                                    : '▼'}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={resetSearch}
+                        >
+                            검색 초기화
+                        </button>
+                    </div>
                 </div>
 
                 <div className="transaction-search-grid">
@@ -1093,14 +1324,127 @@ function TransactionList() {
                     </div>
                 </div>
 
-                <div className="search-actions">
-                    <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={resetSearch}
-                    >
-                        검색 초기화
-                    </button>
+                <div className="advanced-filter-area">
+
+                    {showAdvancedFilters && (
+                        <div className="advanced-filter-panel">
+                            <div className="range-filter-row">
+                                <div className="range-filter-label">
+                                    수량
+                                </div>
+
+                                <div className="range-input-group">
+                                    <input
+                                        type="number"
+                                        name="minQuantity"
+                                        value={
+                                            search.minQuantity
+                                        }
+                                        onChange={changeSearch}
+                                        min="0"
+                                        step="1"
+                                        placeholder="최소"
+                                    />
+
+                                    <span className="range-divider">
+                                        —
+                                    </span>
+
+                                    <input
+                                        type="number"
+                                        name="maxQuantity"
+                                        value={
+                                            search.maxQuantity
+                                        }
+                                        onChange={changeSearch}
+                                        min="0"
+                                        step="1"
+                                        placeholder="최대"
+                                    />
+
+                                    <span className="range-unit">
+                                        개
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="range-filter-row">
+                                <div className="range-filter-label">
+                                    단가
+                                </div>
+
+                                <div className="range-input-group">
+                                    <input
+                                        type="number"
+                                        name="minUnitPrice"
+                                        value={
+                                            search.minUnitPrice
+                                        }
+                                        onChange={changeSearch}
+                                        min="0"
+                                        placeholder="최소"
+                                    />
+
+                                    <span className="range-divider">
+                                        —
+                                    </span>
+
+                                    <input
+                                        type="number"
+                                        name="maxUnitPrice"
+                                        value={
+                                            search.maxUnitPrice
+                                        }
+                                        onChange={changeSearch}
+                                        min="0"
+                                        placeholder="최대"
+                                    />
+
+                                    <span className="range-unit">
+                                        원
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="range-filter-row">
+                                <div className="range-filter-label">
+                                    합계
+                                </div>
+
+                                <div className="range-input-group">
+                                    <input
+                                        type="number"
+                                        name="minTotalAmount"
+                                        value={
+                                            search.minTotalAmount
+                                        }
+                                        onChange={changeSearch}
+                                        min="0"
+                                        placeholder="최소"
+                                    />
+
+                                    <span className="range-divider">
+                                        —
+                                    </span>
+
+                                    <input
+                                        type="number"
+                                        name="maxTotalAmount"
+                                        value={
+                                            search.maxTotalAmount
+                                        }
+                                        onChange={changeSearch}
+                                        min="0"
+                                        placeholder="최대"
+                                    />
+
+                                    <span className="range-unit">
+                                        원
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -1224,17 +1568,185 @@ function TransactionList() {
                 <table className="transaction-table">
                     <thead>
                         <tr>
-                            <th>번호</th>
-                            <th>일자</th>
-                            <th>구분</th>
-                            <th>거래처</th>
-                            <th>품목</th>
-                            <th>수량</th>
-                            <th>단가</th>
-                            <th>공급가</th>
-                            <th>부가세</th>
-                            <th>합계</th>
-                            <th>상태</th>
+                            <th>
+                                <button
+                                    type="button"
+                                    className="table-sort-button"
+                                    onClick={() =>
+                                        changeSort(
+                                            'transactionNo'
+                                        )
+                                    }
+                                >
+                                    번호
+                                    {getSortMark(
+                                        'transactionNo'
+                                    )}
+                                </button>
+                            </th>
+
+                            <th>
+                                <button
+                                    type="button"
+                                    className="table-sort-button"
+                                    onClick={() =>
+                                        changeSort('date')
+                                    }
+                                >
+                                    일자
+                                    {getSortMark(
+                                        'date'
+                                    )}
+                                </button>
+                            </th>
+
+                            <th>
+                                <button
+                                    type="button"
+                                    className="table-sort-button"
+                                    onClick={() =>
+                                        changeSort('type')
+                                    }
+                                >
+                                    구분
+                                    {getSortMark(
+                                        'type'
+                                    )}
+                                </button>
+                            </th>
+
+                            <th>
+                                <button
+                                    type="button"
+                                    className="table-sort-button"
+                                    onClick={() =>
+                                        changeSort(
+                                            'clientName'
+                                        )
+                                    }
+                                >
+                                    거래처
+                                    {getSortMark(
+                                        'clientName'
+                                    )}
+                                </button>
+                            </th>
+
+                            <th>
+                                <button
+                                    type="button"
+                                    className="table-sort-button"
+                                    onClick={() =>
+                                        changeSort(
+                                            'itemName'
+                                        )
+                                    }
+                                >
+                                    품목
+                                    {getSortMark(
+                                        'itemName'
+                                    )}
+                                </button>
+                            </th>
+
+                            <th>
+                                <button
+                                    type="button"
+                                    className="table-sort-button"
+                                    onClick={() =>
+                                        changeSort(
+                                            'quantity'
+                                        )
+                                    }
+                                >
+                                    수량
+                                    {getSortMark(
+                                        'quantity'
+                                    )}
+                                </button>
+                            </th>
+
+                            <th>
+                                <button
+                                    type="button"
+                                    className="table-sort-button"
+                                    onClick={() =>
+                                        changeSort(
+                                            'unitPrice'
+                                        )
+                                    }
+                                >
+                                    단가
+                                    {getSortMark(
+                                        'unitPrice'
+                                    )}
+                                </button>
+                            </th>
+
+                            <th>
+                                <button
+                                    type="button"
+                                    className="table-sort-button"
+                                    onClick={() =>
+                                        changeSort(
+                                            'supplyAmount'
+                                        )
+                                    }
+                                >
+                                    공급가
+                                    {getSortMark(
+                                        'supplyAmount'
+                                    )}
+                                </button>
+                            </th>
+
+                            <th>
+                                <button
+                                    type="button"
+                                    className="table-sort-button"
+                                    onClick={() =>
+                                        changeSort('vat')
+                                    }
+                                >
+                                    부가세
+                                    {getSortMark('vat')}
+                                </button>
+                            </th>
+
+                            <th>
+                                <button
+                                    type="button"
+                                    className="table-sort-button"
+                                    onClick={() =>
+                                        changeSort(
+                                            'totalAmount'
+                                        )
+                                    }
+                                >
+                                    합계
+                                    {getSortMark(
+                                        'totalAmount'
+                                    )}
+                                </button>
+                            </th>
+
+                            <th>
+                                <button
+                                    type="button"
+                                    className="table-sort-button"
+                                    onClick={() =>
+                                        changeSort(
+                                            'status'
+                                        )
+                                    }
+                                >
+                                    상태
+                                    {getSortMark(
+                                        'status'
+                                    )}
+                                </button>
+                            </th>
+
                             <th>관리</th>
                         </tr>
                     </thead>

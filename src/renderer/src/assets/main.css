@@ -724,7 +724,7 @@ body {
 
 .search-card {
   margin-bottom: 20px;
-  padding: 20px;
+  padding: 14px 16px;
   background: #ffffff;
   border: 1px solid #dfe4ea;
   border-radius: 10px;
@@ -752,23 +752,41 @@ body {
 }
 
 .transaction-search-grid {
-  display: grid;
-  grid-template-columns:
-    repeat(3, minmax(150px, 1fr));
-  gap: 15px;
+    display: grid;
+
+    grid-template-columns:
+        170px
+        170px
+        130px
+        minmax(200px, 1fr)
+        minmax(200px, 1fr)
+        auto;
+
+    gap: 12px;
+
+    align-items: end;
 }
 
 .search-option-field {
-  display: flex;
-  align-items: end;
-  padding-bottom: 9px;
+    display: flex;
+    align-items: center;
+
+    height: 38px;
+
+    padding: 0 10px;
+
+    white-space: nowrap;
 }
 
 .search-option-field label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    margin: 0;
+
+    font-size: 13px;
+    cursor: pointer;
 }
 
 .search-option-field input {
@@ -3410,4 +3428,130 @@ tbody tr:hover td {
 
 html {
   scrollbar-gutter: stable;
+}
+
+.table-sort-button {
+    width: 100%;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: inherit;
+    cursor: pointer;
+    text-align: inherit;
+    white-space: nowrap;
+}
+
+.table-sort-button:hover {
+    text-decoration: underline;
+}
+
+/* 입출고 조회 상세 검색 */
+
+.advanced-filter-area {
+    margin-top: 12px;
+}
+
+.advanced-filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+
+    padding: 7px 12px;
+
+    border: 1px solid #d8dee8;
+    border-radius: 8px;
+
+    background: #fff;
+
+    font-size: 13px;
+    font-weight: 600;
+
+    cursor: pointer;
+}
+
+.advanced-filter-toggle:hover {
+    background: #f7f9fc;
+}
+
+.advanced-filter-toggle.active {
+    background: #f4f7fb;
+}
+
+.advanced-filter-arrow {
+    font-size: 9px;
+    opacity: 0.65;
+}
+
+.advanced-filter-panel {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+
+    margin-top: 12px;
+    padding: 12px 14px;
+
+    border: 1px solid #e1e6ee;
+    border-radius: 8px;
+
+    background: #f8fafc;
+}
+
+.range-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    min-width: 0;
+}
+
+.range-filter-label {
+    width: auto;
+
+    margin-right: 4px;
+
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.range-input-group input {
+    font-size: 13px;
+    width: 86px;
+    height: 32px;
+
+    padding: 4px 7px;
+
+    text-align: right;
+}
+
+.range-input-group input:focus {
+    outline: none;
+    border-color: #8fa8c9;
+}
+
+.range-divider {
+    color: #9098a5;
+    font-size: 14px;
+}
+
+.range-unit {
+    min-width: 18px;
+
+    color: #6d7580;
+    font-size: 12px;
+}
+
+.search-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    margin-bottom: 14px;
+}
+
+.search-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }

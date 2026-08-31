@@ -1,8 +1,6 @@
 import { useState } from 'react'
 
 function InventoryChecker() {
-  const [referenceDate, setReferenceDate] =
-    useState('')
 
   const [result, setResult] =
     useState(null)
@@ -17,9 +15,7 @@ function InventoryChecker() {
     try {
       const response =
         await window.inventoryApi
-          .checkInventory(
-            referenceDate
-          )
+          .checkInventory()
 
       setResult(response)
 
@@ -69,25 +65,16 @@ function InventoryChecker() {
 
       <div className="inventory-check-card">
         <div className="inventory-check-title">
-          재고 계산 기준일
+          현재 재고 정합성 검사
         </div>
 
         <p className="inventory-check-description">
-          기준일을 포함하여 이후의 입고,
-          출고, 출고반입, 재고조정 내역을 계산합니다.
+          기초재고부터 현재까지의 전체 입고,
+          출고, 출고반입, 재고조정 내역을 계산하여
+          저장된 현재재고와 비교합니다.
         </p>
 
         <div className="inventory-check-controls">
-          <input
-            type="date"
-            value={referenceDate}
-            onChange={(e) =>
-              setReferenceDate(
-                e.target.value
-              )
-            }
-          />
-
           <button
             type="button"
             className="inventory-check-button"
@@ -117,10 +104,10 @@ function InventoryChecker() {
         <>
           <div className="inventory-check-summary">
             <div>
-              <span>기준일</span>
+              <span>검사 기준</span>
 
               <strong>
-                {result.referenceDate}
+                {result.calculationBasis}
               </strong>
             </div>
 

@@ -48,10 +48,9 @@ const inventoryApi = {
         'export:folder:open'
       ),
 
-  checkInventory: (referenceDate) =>
+  checkInventory: () =>
     ipcRenderer.invoke(
-      'inventory:check',
-      referenceDate
+      'inventory:check'
     ),
 
   getInventoryAdjustments: () =>

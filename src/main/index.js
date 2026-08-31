@@ -424,6 +424,29 @@ function addItem(item) {
     throw new Error(`이미 존재하는 품목 코드입니다: ${code}`)
   }
 
+  const initialStock =
+    item.initialStock === '' ||
+    item.initialStock === null ||
+    item.initialStock === undefined
+      ? 0
+      : Number(
+          item.initialStock
+        )
+
+  if (
+    !Number.isFinite(
+      initialStock
+    ) ||
+    !Number.isInteger(
+      initialStock
+    ) ||
+    initialStock < 0
+  ) {
+    throw new Error(
+      '기초재고량은 0 이상의 정수여야 합니다.'
+    )
+  }
+
   const newItem = [
     String(item.type ?? '').trim(),
     code,
@@ -431,8 +454,11 @@ function addItem(item) {
     item.initialPrice ?? '',
     item.purchasePrice ?? '',
     item.salesPrice ?? '',
-    item.initialStock ?? '',
-    item.currentStock ?? '',
+
+    // 신규 품목은 둘이 반드시 동일
+    initialStock,
+    initialStock,
+
     String(item.unit ?? '').trim(),
     String(item.spec ?? '').trim(),
     String(item.brand ?? '').trim()
@@ -1442,18 +1468,56 @@ function updateItem(originalCode, item) {
     throw new Error(`이미 존재하는 품목 코드입니다: ${newCode}`)
   }
 
+  const existingItem =
+    itemRows[targetIndex]
+
   itemRows[targetIndex] = {
-    구분: String(item.type ?? '').trim(),
-    코드: newCode,
-    품목명: name,
-    기초재고단가: item.initialPrice ?? '',
-    매입단가: item.purchasePrice ?? '',
-    매출단가: item.salesPrice ?? '',
-    기초재고량: item.initialStock ?? '',
-    현재재고량: item.currentStock ?? '',
-    단위: String(item.unit ?? '').trim(),
-    규격: String(item.spec ?? '').trim(),
-    브랜드명: String(item.brand ?? '').trim()
+    구분:
+      String(
+        item.type ?? ''
+      ).trim(),
+
+    코드:
+      newCode,
+
+    품목명:
+      name,
+
+    기초재고단가:
+      item.initialPrice ?? '',
+
+    매입단가:
+      item.purchasePrice ?? '',
+
+    매출단가:
+      item.salesPrice ?? '',
+
+    // 최초 등록된 기초재고 유지
+    기초재고량:
+      existingItem[
+        '기초재고량'
+      ] ?? '',
+
+    // 현재재고는 입출고/재고조정으로만 변경
+    현재재고량:
+      existingItem[
+        '현재재고량'
+      ] ?? '',
+
+    단위:
+      String(
+        item.unit ?? ''
+      ).trim(),
+
+    규격:
+      String(
+        item.spec ?? ''
+      ).trim(),
+
+    브랜드명:
+      String(
+        item.brand ?? ''
+      ).trim()
   }
 
   const rows = itemRows.map((row) =>
@@ -2174,11 +2238,25 @@ function getNextAdjustmentNo(
   return maxAdjustmentNo + 1
 }
 
-function parsePositiveNumber(value, fieldName) {
-  const numberValue = Number(value)
+function parsePositiveInteger(
+  value,
+  fieldName
+) {
+  const numberValue =
+    Number(value)
 
-  if (!Number.isFinite(numberValue) || numberValue <= 0) {
-    throw new Error(`${fieldName}은(는) 0보다 큰 숫자여야 합니다.`)
+  if (
+    !Number.isFinite(
+      numberValue
+    ) ||
+    !Number.isInteger(
+      numberValue
+    ) ||
+    numberValue <= 0
+  ) {
+    throw new Error(
+      `${fieldName}은(는) 1 이상의 정수여야 합니다.`
+    )
   }
 
   return numberValue
@@ -2301,10 +2379,11 @@ function addTransaction(transaction) {
     )
   }
 
-  const quantity = parsePositiveNumber(
-    transaction.quantity,
-    '수량'
-  )
+  const quantity =
+    parsePositiveInteger(
+      transaction.quantity,
+      '수량'
+    )
 
   const unitPrice = parseNonNegativeNumber(
     transaction.unitPrice,
@@ -2772,16 +2851,39 @@ function readInventoryAdjustments() {
     )
 }
 
-function cancelTransaction(transactionNo, reason = '') {
-  const dataFilePath = getDataFilePath(dataFileName)
+function cancelTransaction(
+  transactionNo,
+  reason = ''
+) {
+  const dataFilePath =
+    getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
-    throw new Error('재고관리 데이터 파일이 없습니다.')
+    throw new Error(
+      '재고관리 데이터 파일이 없습니다.'
+    )
   }
 
-  const workbook = XLSX.readFile(dataFilePath, {
-    cellDates: true
-  })
+  const cancelReason =
+    String(
+      reason ?? ''
+    ).trim()
+
+  if (!cancelReason) {
+    throw new Error(
+      '취소 사유를 입력해주세요.'
+    )
+  }
+
+  runAutoBackupIfNeeded()
+
+  const workbook =
+    XLSX.readFile(
+      dataFilePath,
+      {
+        cellDates: true
+      }
+    )
 
   const transactionRows = readSheetRows(
     workbook,
@@ -2881,7 +2983,7 @@ function cancelTransaction(transactionNo, reason = '') {
     ...transaction,
     취소여부: 'Y',
     취소일시: new Date(),
-    취소사유: String(reason ?? '').trim()
+    취소사유: cancelReason
   }
 
   itemRows[itemIndex] = {
@@ -2962,124 +3064,144 @@ function normalizeDateOnly(value) {
   return ''
 }
 
-function checkInventory(referenceDate) {
-  const dataFilePath = getDataFilePath(dataFileName)
+function checkInventory() {
+  const dataFilePath =
+    getDataFilePath(dataFileName)
 
   if (!existsSync(dataFilePath)) {
-    throw new Error('재고관리 데이터 파일이 없습니다.')
+    throw new Error(
+      '재고관리 데이터 파일이 없습니다.'
+    )
   }
 
-  const normalizedReferenceDate =
-    normalizeDateOnly(referenceDate)
+  const workbook =
+    XLSX.readFile(
+      dataFilePath,
+      {
+        cellDates: true
+      }
+    )
 
-  if (!normalizedReferenceDate) {
-    throw new Error('올바른 기준일을 입력해주세요.')
-  }
+  const itemRows =
+    readSheetRows(
+      workbook,
+      '품목'
+    )
 
-  const workbook = XLSX.readFile(dataFilePath, {
-    cellDates: true
-  })
-
-  const itemRows = readSheetRows(
-    workbook,
-    '품목'
-  )
-
-  const transactionRows = readSheetRows(
-    workbook,
-    '입출고내역'
-  )
+  const transactionRows =
+    readSheetRows(
+      workbook,
+      '입출고내역'
+    )
 
   ensureWorkbookSheet(
     workbook,
     '재고조정'
   )
 
-  const adjustmentRows = readSheetRows(
-    workbook,
-    '재고조정'
-  )
+  const adjustmentRows =
+    readSheetRows(
+      workbook,
+      '재고조정'
+    )
 
   const result = []
 
   for (const item of itemRows) {
     const itemCode =
-      normalizeCode(item['코드'])
+      normalizeCode(
+        item['코드']
+      )
 
     if (!itemCode) {
       continue
     }
 
     const itemName =
-      String(item['품목명'] ?? '').trim()
+      String(
+        item['품목명'] ?? ''
+      ).trim()
 
     const initialStock =
       item['기초재고량'] === ''
         ? 0
-        : Number(item['기초재고량'])
+        : Number(
+            item['기초재고량']
+          )
 
     const currentStock =
       item['현재재고량'] === ''
         ? 0
-        : Number(item['현재재고량'])
+        : Number(
+            item['현재재고량']
+          )
 
-    if (!Number.isFinite(initialStock)) {
+    if (
+      !Number.isFinite(
+        initialStock
+      )
+    ) {
       throw new Error(
         `${itemCode} 품목의 기초재고량이 올바르지 않습니다.`
       )
     }
 
-    if (!Number.isFinite(currentStock)) {
+    if (
+      !Number.isFinite(
+        currentStock
+      )
+    ) {
       throw new Error(
         `${itemCode} 품목의 현재재고량이 올바르지 않습니다.`
       )
     }
 
-    let calculatedStock = initialStock
+    let calculatedStock =
+      initialStock
 
     let inQuantity = 0
     let outQuantity = 0
     let returnQuantity = 0
     let adjustmentQuantity = 0
 
-    for (const transaction of transactionRows) {
+    // 전체 입출고 내역 계산
+    for (
+      const transaction
+      of transactionRows
+    ) {
       if (
-        normalizeCode(transaction['품목코드']) !==
-        itemCode
+        normalizeCode(
+          transaction['품목코드']
+        ) !== itemCode
       ) {
         continue
       }
 
+      // 취소 거래는 재고 계산에서 제외
       if (
         String(
-          transaction['취소여부'] ?? 'N'
+          transaction[
+            '취소여부'
+          ] ?? 'N'
         ).trim() === 'Y'
       ) {
         continue
       }
 
-      const transactionDate =
-        normalizeDateOnly(transaction['일자'])
-
-      if (!transactionDate) {
-        continue
-      }
-
-      if (
-        transactionDate <
-        normalizedReferenceDate
-      ) {
-        continue
-      }
-
       const type =
-        String(transaction['구분'] ?? '').trim()
+        String(
+          transaction['구분'] ?? ''
+        ).trim()
 
       const quantity =
-        Number(transaction['수량'])
+        Number(
+          transaction['수량']
+        )
 
       if (
-        !Number.isFinite(quantity) ||
+        !Number.isFinite(
+          quantity
+        ) ||
         quantity < 0
       ) {
         throw new Error(
@@ -3088,38 +3210,44 @@ function checkInventory(referenceDate) {
       }
 
       if (type === '입고') {
-        calculatedStock += quantity
-        inQuantity += quantity
-      } else if (type === '출고') {
-        calculatedStock -= quantity
-        outQuantity += quantity
-      } else if (type === '출고반입') {
-        calculatedStock += quantity
-        returnQuantity += quantity
+        calculatedStock +=
+          quantity
+
+        inQuantity +=
+          quantity
+      }
+      else if (type === '출고') {
+        calculatedStock -=
+          quantity
+
+        outQuantity +=
+          quantity
+      }
+      else if (
+        type === '출고반입'
+      ) {
+        calculatedStock +=
+          quantity
+
+        returnQuantity +=
+          quantity
+      }
+      else {
+        throw new Error(
+          `${transaction['거래번호']}번 거래의 구분이 올바르지 않습니다: ${type}`
+        )
       }
     }
 
-    for (const adjustment of adjustmentRows) {
+    // 전체 재고조정 내역 계산
+    for (
+      const adjustment
+      of adjustmentRows
+    ) {
       if (
         normalizeCode(
           adjustment['품목코드']
         ) !== itemCode
-      ) {
-        continue
-      }
-
-      const adjustmentDate =
-        normalizeDateOnly(
-          adjustment['일자']
-        )
-
-      if (!adjustmentDate) {
-        continue
-      }
-
-      if (
-        adjustmentDate <
-        normalizedReferenceDate
       ) {
         continue
       }
@@ -3130,33 +3258,48 @@ function checkInventory(referenceDate) {
         )
 
       if (
-        !Number.isFinite(quantity)
+        !Number.isFinite(
+          quantity
+        )
       ) {
         throw new Error(
           `${adjustment['조정번호']}번 재고조정의 조정수량이 올바르지 않습니다.`
         )
       }
 
-      calculatedStock += quantity
-      adjustmentQuantity += quantity
+      calculatedStock +=
+        quantity
+
+      adjustmentQuantity +=
+        quantity
     }
 
     const difference =
-      currentStock - calculatedStock
+      currentStock -
+      calculatedStock
 
     if (difference !== 0) {
       result.push({
-        code: itemCode,
-        name: itemName,
+        code:
+          itemCode,
+
+        name:
+          itemName,
 
         initialStock,
+
         inQuantity,
+
         outQuantity,
+
         returnQuantity,
+
         adjustmentQuantity,
 
         calculatedStock,
+
         currentStock,
+
         difference
       })
     }
@@ -3164,12 +3307,16 @@ function checkInventory(referenceDate) {
 
   return {
     success: true,
-    referenceDate:
-      normalizedReferenceDate,
+
+    calculationBasis:
+      '전체 이력',
 
     totalItemCount:
       itemRows.filter(
-        (item) => normalizeCode(item['코드'])
+        (item) =>
+          normalizeCode(
+            item['코드']
+          )
       ).length,
 
     mismatchCount:
@@ -3888,8 +4035,8 @@ app.whenReady().then(() => {
 
   ipcMain.handle(
     'inventory:check',
-    (_, referenceDate) =>
-      checkInventory(referenceDate)
+    () =>
+      checkInventory()
   )
 
   ipcMain.handle(

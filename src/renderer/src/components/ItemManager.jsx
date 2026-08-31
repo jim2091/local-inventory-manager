@@ -58,6 +58,21 @@ function ItemManager() {
             value
         } = e.target
 
+        // 새 품목 등록 중 기초재고를 입력하면
+        // 현재재고도 같은 값으로 표시
+        if (
+            name === 'initialStock' &&
+            !selectedCode
+        ) {
+            setForm((prev) => ({
+                ...prev,
+                initialStock: value,
+                currentStock: value
+            }))
+
+            return
+        }
+
         setForm((prev) => ({
             ...prev,
             [name]: value
@@ -582,8 +597,19 @@ function ItemManager() {
                                     form.initialStock
                                 }
                                 onChange={changeForm}
+                                readOnly={
+                                    Boolean(selectedCode)
+                                }
                                 placeholder="0"
                             />
+
+                        {selectedCode && (
+                            <div className="field-help">
+                                {selectedCode
+                                    ? '현재재고 변경은 입출고 또는 재고 조정으로 처리합니다.'
+                                    : '신규 등록 시 기초재고량과 동일하게 자동 설정됩니다.'}
+                            </div>
+                        )}
                         </div>
 
                         <div className="form-field">
