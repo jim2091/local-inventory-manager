@@ -542,21 +542,28 @@ body {
   font-size: 24px;
 }
 
-.transaction-submit-button {
+.content .transaction-submit-button {
   width: 100%;
   min-height: 48px;
   margin-top: 16px;
+
+  padding: 7px 12px;
+
   border: 0;
   border-radius: 7px;
+
   background: #355f8c;
-  color: #ffffff !important;
+  color: #ffffff;
+
   font-size: 16px;
   font-weight: 700;
+
   cursor: pointer;
 }
 
-.transaction-submit-button:hover {
-  background: #2e537b !important;
+.content .transaction-submit-button:hover {
+  background: #2e537b;
+  color: #ffffff;
 }
 
 .transaction-message {
@@ -3554,4 +3561,174 @@ html {
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+/* 공통 날짜 입력 */
+
+.date-field-wrapper {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+}
+
+.date-segment-input {
+    display: flex;
+    align-items: center;
+
+    width: 100%;
+    height: 38px;
+
+    padding: 0 40px 0 8px;
+
+    border: 1px solid #d6dce5;
+    border-radius: 7px;
+
+    background: #fff;
+
+    box-sizing: border-box;
+}
+
+.date-segment-input:focus-within {
+    border-color: #8fa8c9;
+
+    box-shadow:
+        0 0 0 2px
+        rgba(143, 168, 201, 0.12);
+}
+
+.date-segment-input input {
+    min-width: 0;
+    height: 100%;
+
+    padding: 0;
+
+    border: 0 !important;
+    outline: 0 !important;
+    box-shadow: none !important;
+
+    background: transparent;
+
+    font-size: 13px;
+    text-align: center;
+}
+
+.date-segment-input input:nth-of-type(1) {
+    width: 44px;
+}
+
+.date-segment-input input:nth-of-type(2),
+.date-segment-input input:nth-of-type(3) {
+    width: 23px;
+}
+
+.date-separator {
+    flex-shrink: 0;
+
+    margin: 0 2px;
+
+    color: #a0a8b3;
+    font-size: 12px;
+}
+
+/* react-datepicker가 만드는 wrapper를
+   날짜 입력칸 오른쪽 내부에 배치 */
+.date-field-wrapper
+.react-datepicker-wrapper {
+    position: absolute;
+
+    top: 50%;
+    right: 5px;
+
+    width: auto;
+
+    transform: translateY(-50%);
+}
+
+.date-field-wrapper
+.react-datepicker__input-container {
+    display: flex;
+    width: auto;
+}
+
+.date-calendar-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 30px;
+    height: 30px;
+
+    padding: 0;
+
+    border: 0;
+    border-radius: 6px;
+
+    background: transparent;
+
+    color: #596675;
+
+    cursor: pointer;
+}
+
+.date-calendar-button:hover {
+    background: #eef2f6;
+}
+
+.date-calendar-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 40px;
+    height: 40px;
+
+    padding: 0;
+
+    border: 1px solid #d6dce5;
+    border-radius: 8px;
+
+    background: #fff;
+
+    cursor: pointer;
+}
+
+.date-calendar-button:hover {
+    background: #f4f7fa;
+    border-color: #b9c3d0;
+}
+
+.custom-calendar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    padding: 4px 10px 10px;
+}
+
+.custom-calendar-header strong {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.custom-calendar-header button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 28px;
+    height: 28px;
+
+    border: 0;
+    border-radius: 6px;
+
+    background: transparent;
+
+    font-size: 22px;
+    color: #576576;
+
+    cursor: pointer;
+}
+
+.custom-calendar-header button:hover {
+    background: #eaf0f6;
 }

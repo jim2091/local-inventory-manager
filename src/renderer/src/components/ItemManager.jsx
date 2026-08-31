@@ -232,6 +232,27 @@ function ItemManager() {
         }
     }
 
+    const itemTypeOptions =
+        useMemo(() => {
+            return [
+                ...new Set(
+                    items
+                        .map((item) =>
+                            String(
+                                item.type ?? ''
+                            ).trim()
+                        )
+                        .filter(Boolean)
+                )
+            ].sort(
+                (a, b) =>
+                    a.localeCompare(
+                        b,
+                        'ko'
+                    )
+            )
+        }, [items])
+
     const filteredItems =
         useMemo(() => {
             const searchKeyword =
@@ -281,6 +302,12 @@ function ItemManager() {
 
         return number.toLocaleString()
     }
+
+    
+    const [
+        showTypeResults,
+        setShowTypeResults
+    ] = useState(false)
 
     return (
         <div className="item-page">
@@ -486,12 +513,68 @@ function ItemManager() {
                         <div className="form-field">
                             <label>구분</label>
 
-                            <input
-                                name="type"
-                                value={form.type}
-                                onChange={changeForm}
-                                placeholder="예: 상품"
-                            />
+                            <div className="search-select">
+                                <input
+                                    name="type"
+                                    value={form.type}
+                                    onChange={(e) => {
+                                        changeForm(e)
+                                        setShowTypeResults(true)
+                                    }}
+                                    onFocus={() =>
+                                        setShowTypeResults(true)
+                                    }
+                                    onClick={() =>
+                                        setShowTypeResults(true)
+                                    }
+                                    onBlur={() => {
+                                        setTimeout(() => {
+                                            setShowTypeResults(false)
+                                        }, 100)
+                                    }}
+                                    autoComplete="off"
+                                    placeholder="선택 또는 직접 입력"
+                                />
+
+                                {showTypeResults && (
+                                    <div className="search-result-list">
+                                        {itemTypeOptions.length > 0 ? (
+                                            itemTypeOptions.map(
+                                                (type) => (
+                                                    <button
+                                                        key={type}
+                                                        type="button"
+                                                        className="search-result-item"
+                                                        onMouseDown={(e) => {
+                                                            e.preventDefault()
+                                                        }}
+                                                        onClick={() => {
+                                                            setForm(
+                                                                (prev) => ({
+                                                                    ...prev,
+                                                                    type
+                                                                })
+                                                            )
+
+                                                            setShowTypeResults(
+                                                                false
+                                                            )
+                                                        }}
+                                                    >
+                                                        <span className="search-result-name">
+                                                            {type}
+                                                        </span>
+                                                    </button>
+                                                )
+                                            )
+                                        ) : (
+                                            <div className="search-result-empty">
+                                                등록된 구분이 없습니다.
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         <div className="form-field">

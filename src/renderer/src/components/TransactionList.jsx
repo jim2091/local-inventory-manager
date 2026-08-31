@@ -5,6 +5,9 @@ import {
     useState
 } from 'react'
 
+import DateInput
+    from './common/DateInput'
+
 const emptySearch = {
     startDate: '',
     endDate: '',
@@ -1082,22 +1085,32 @@ function TransactionList() {
                     <div className="form-field">
                         <label>시작일</label>
 
-                        <input
-                            type="date"
-                            name="startDate"
+                        <DateInput
                             value={search.startDate}
-                            onChange={changeSearch}
+                            onChange={(date) => {
+                                setSearch((prev) => ({
+                                    ...prev,
+                                    startDate: date
+                                }))
+
+                                setPage(1)
+                            }}
                         />
                     </div>
 
                     <div className="form-field">
                         <label>종료일</label>
 
-                        <input
-                            type="date"
-                            name="endDate"
+                        <DateInput
                             value={search.endDate}
-                            onChange={changeSearch}
+                            onChange={(date) => {
+                                setSearch((prev) => ({
+                                    ...prev,
+                                    endDate: date
+                                }))
+
+                                setPage(1)
+                            }}
                         />
                     </div>
 

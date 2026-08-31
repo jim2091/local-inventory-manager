@@ -1,4 +1,10 @@
-import { useEffect, useState } from 'react'
+import {
+    useEffect,
+    useRef,
+    useState
+} from 'react'
+import DateInput
+    from './common/DateInput'
 
 function getToday() {
   const now = new Date()
@@ -30,8 +36,15 @@ function TransactionManager() {
   const [showClientResults, setShowClientResults] = useState(false)
   const [showItemResults, setShowItemResults] = useState(false)
 
+  const clientDropdownRef =
+    useRef(null)
+
+  const itemDropdownRef =
+      useRef(null)
+
   const [message, setMessage] = useState('')
   const [result, setResult] = useState(null)
+  
 
   useEffect(() => {
     window.inventoryApi
@@ -64,6 +77,40 @@ function TransactionManager() {
         setMessage('거래처 목록을 불러오지 못했습니다.')
       })
   }, [form.type])
+
+  useEffect(() => {
+      const handleOutsideClick = (e) => {
+          if (
+              clientDropdownRef.current &&
+              !clientDropdownRef.current.contains(
+                  e.target
+              )
+          ) {
+              setShowClientResults(false)
+          }
+
+          if (
+              itemDropdownRef.current &&
+              !itemDropdownRef.current.contains(
+                  e.target
+              )
+          ) {
+              setShowItemResults(false)
+          }
+      }
+
+      document.addEventListener(
+          'mousedown',
+          handleOutsideClick
+      )
+
+      return () => {
+          document.removeEventListener(
+              'mousedown',
+              handleOutsideClick
+          )
+      }
+  }, [])
 
   const changeForm = (e) => {
     const { name, value } = e.target
@@ -289,19 +336,27 @@ function TransactionManager() {
           </div>
 
           <div className="transaction-form-grid">
+            
             <div className="form-field">
-              <label htmlFor="transaction-date">
-                일자
+              <label>
+                  일자
+                  <span className="required-mark">
+                      *
+                  </span>
               </label>
 
-              <input
-                id="transaction-date"
-                type="date"
-                name="date"
-                value={form.date}
-                onChange={changeForm}
+              <DateInput
+                  value={form.date}
+                  onChange={(date) =>
+                      setForm(
+                          (prev) => ({
+                              ...prev,
+                              date
+                          })
+                      )
+                  }
               />
-            </div>
+          </div>
 
             <div className="form-field">
               <label htmlFor="transaction-type">
@@ -333,25 +388,29 @@ function TransactionManager() {
                 거래처
               </label>
 
-              <div className="search-select">
+              <div className="search-select transaction-dropdown" ref={clientDropdownRef}>
                 <input
                   id="transaction-client"
                   type="text"
                   value={clientSearch}
                   placeholder="거래처 코드 또는 이름 검색"
                   autoComplete="off"
-                  onFocus={() =>
-                    setShowClientResults(true)
-                  }
+                  onFocus={() => {
+                      setShowItemResults(false)
+                      setShowClientResults(true)
+                  }}
                   onChange={(e) => {
-                    setClientSearch(e.target.value)
+                      setClientSearch(
+                          e.target.value
+                      )
 
-                    setForm((prev) => ({
-                      ...prev,
-                      clientCode: ''
-                    }))
+                      setForm((prev) => ({
+                          ...prev,
+                          clientCode: ''
+                      }))
 
-                    setShowClientResults(true)
+                      setShowItemResults(false)
+                      setShowClientResults(true)
                   }}
                 />
 
@@ -391,26 +450,30 @@ function TransactionManager() {
                 품목
               </label>
 
-              <div className="search-select">
+              <div className="search-select transaction-dropdown" ref={itemDropdownRef}>
                 <input
                   id="transaction-item"
                   type="text"
                   value={itemSearch}
                   placeholder="품목 코드 또는 품목명 검색"
                   autoComplete="off"
-                  onFocus={() =>
-                    setShowItemResults(true)
-                  }
+                  onFocus={() => {
+                      setShowClientResults(false)
+                      setShowItemResults(true)
+                  }}
                   onChange={(e) => {
-                    setItemSearch(e.target.value)
+                      setItemSearch(
+                          e.target.value
+                      )
 
-                    setForm((prev) => ({
-                      ...prev,
-                      itemCode: '',
-                      unitPrice: ''
-                    }))
+                      setForm((prev) => ({
+                          ...prev,
+                          itemCode: '',
+                          unitPrice: ''
+                      }))
 
-                    setShowItemResults(true)
+                      setShowClientResults(false)
+                      setShowItemResults(true)
                   }}
                 />
 

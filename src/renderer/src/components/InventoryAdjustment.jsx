@@ -2,8 +2,12 @@ import {
     useCallback,
     useEffect,
     useMemo,
+    useRef,
     useState
 } from 'react'
+
+import DateInput
+    from './common/DateInput'
 
 function getToday() {
     const now = new Date()
@@ -54,6 +58,9 @@ function InventoryAdjustment() {
         setShowItemResults
     ] = useState(false)
 
+    const itemDropdownRef =
+        useRef(null)
+
     const [message, setMessage] =
         useState('')
 
@@ -90,6 +97,31 @@ function InventoryAdjustment() {
     useEffect(() => {
         loadData()
     }, [loadData])
+
+    useEffect(() => {
+        const handleOutsideClick = (e) => {
+            if (
+                itemDropdownRef.current &&
+                !itemDropdownRef.current.contains(
+                    e.target
+                )
+            ) {
+                setShowItemResults(false)
+            }
+        }
+
+        document.addEventListener(
+            'mousedown',
+            handleOutsideClick
+        )
+
+        return () => {
+            document.removeEventListener(
+                'mousedown',
+                handleOutsideClick
+            )
+        }
+    }, [])
 
     const selectedItem =
         items.find(
@@ -331,20 +363,30 @@ function InventoryAdjustment() {
 
                     <div className="adjustment-form-grid">
                         <div className="form-field">
-                            <label>일자</label>
+                            <label>
+                                일자
+                                <span className="required-mark">
+                                    *
+                                </span>
+                            </label>
 
-                            <input
-                                type="date"
-                                name="date"
+                            <DateInput
                                 value={form.date}
-                                onChange={changeForm}
+                                onChange={(date) =>
+                                    setForm(
+                                        (prev) => ({
+                                            ...prev,
+                                            date
+                                        })
+                                    )
+                                }
                             />
                         </div>
 
                         <div className="form-field adjustment-full">
                             <label>품목</label>
 
-                            <div className="search-select">
+                            <div className="search-select" ref={itemDropdownRef}>
                                 <input
                                     type="text"
                                     value={itemSearch}
