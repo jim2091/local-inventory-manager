@@ -44,6 +44,9 @@ function TransactionManager() {
 
   const [message, setMessage] = useState('')
   const [result, setResult] = useState(null)
+
+  const [isSubmitting, setIsSubmitting] =
+    useState(false)
   
 
   useEffect(() => {
@@ -175,6 +178,11 @@ function TransactionManager() {
   }
 
   const submitTransaction = async () => {
+    if (isSubmitting) {
+      return
+    }
+
+    setIsSubmitting(true)
     setMessage('')
     setResult(null)
 
@@ -223,6 +231,9 @@ function TransactionManager() {
         error.message ||
         '입출고 등록에 실패했습니다.'
       )
+    }
+    finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -617,8 +628,11 @@ function TransactionManager() {
             type="button"
             className="transaction-submit-button"
             onClick={submitTransaction}
+            disabled={isSubmitting}
           >
-            등록하기
+            {isSubmitting
+              ? '등록 중...'
+              : '등록하기'}
           </button>
 
           {message && (

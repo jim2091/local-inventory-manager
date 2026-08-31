@@ -3732,3 +3732,22 @@ html {
 .custom-calendar-header button:hover {
     background: #eaf0f6;
 }
+
+.content .transaction-submit-button:disabled,
+.content .adjustment-submit-button:disabled,
+.content .cancel-confirm-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.content .transaction-submit-button:disabled:hover {
+  background: #355f8c;
+}
+
+.content .adjustment-submit-button:disabled:hover {
+  background: #355f8c;
+}
+
+.content .cancel-confirm-button:disabled:hover {
+  background: #b34444;
+}

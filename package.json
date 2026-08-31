@@ -1,10 +1,9 @@
 {
-  "name": "inventory-temp",
+  "name": "local-inventory-manager",
   "version": "1.0.0",
-  "description": "An Electron application with React",
+  "description": "Excel 기반 로컬 재고관리 프로그램",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "ljb",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",

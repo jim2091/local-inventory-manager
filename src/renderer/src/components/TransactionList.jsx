@@ -107,6 +107,9 @@ function TransactionList() {
             direction: 'desc'
         })
 
+    const [isCanceling, setIsCanceling] =
+        useState(false)
+
     const loadTransactions =
         useCallback(() => {
             window.inventoryApi
@@ -797,7 +800,10 @@ function TransactionList() {
 
     const cancelTransaction =
         async () => {
-            if (!cancelTarget) {
+            if (
+                !cancelTarget ||
+                isCanceling
+            ) {
                 return
             }
 
@@ -811,6 +817,7 @@ function TransactionList() {
                 return
             }
 
+            setIsCanceling(true)
             setMessage('')
 
             try {
@@ -840,6 +847,8 @@ function TransactionList() {
                     error.message ||
                     '거래 취소에 실패했습니다.'
                 )
+            } finally {
+                setIsCanceling(false)
             }
         }
 
@@ -2097,6 +2106,7 @@ function TransactionList() {
                                 onClick={
                                     closeCancelModal
                                 }
+                                disabled={isCanceling}
                             >
                                 닫기
                             </button>
@@ -2104,11 +2114,12 @@ function TransactionList() {
                             <button
                                 type="button"
                                 className="cancel-confirm-button"
-                                onClick={
-                                    cancelTransaction
-                                }
+                                onClick={cancelTransaction}
+                                disabled={isCanceling}
                             >
-                                거래 취소
+                                {isCanceling
+                                    ? '취소 처리 중...'
+                                    : '거래 취소'}
                             </button>
                         </div>
                     </div>

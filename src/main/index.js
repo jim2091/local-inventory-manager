@@ -260,18 +260,112 @@ function ensureWorkbookSheet(
   )
 }
 
-function saveWorkbookSafely(workbook, filePath) {
+function isFileAccessError(error) {
+  const code =
+    String(
+      error?.code ?? ''
+    )
+
+  const message =
+    String(
+      error?.message ?? error ?? ''
+    )
+
+  return (
+    code === 'EBUSY' ||
+    code === 'EPERM' ||
+    code === 'EACCES' ||
+    message.includes('EBUSY') ||
+    message.includes('EPERM') ||
+    message.includes('EACCES') ||
+    message.includes('resource busy or locked')
+  )
+}
+
+function saveWorkbookSafely(
+  workbook,
+  filePath
+) {
   ensureDataFolders()
-  const tempFilePath = getDataFilePath(tempDataFileName)
 
-  if (existsSync(tempFilePath)) {
-    unlinkSync(tempFilePath)
+  const tempFilePath =
+    getDataFilePath(
+      tempDataFileName
+    )
+
+  try {
+    if (
+      existsSync(
+        tempFilePath
+      )
+    ) {
+      unlinkSync(
+        tempFilePath
+      )
+    }
+
+    // 1. 먼저 임시파일에 저장
+    XLSX.writeFile(
+      workbook,
+      tempFilePath,
+      {
+        bookType: 'xlsx',
+        cellDates: true
+      }
+    )
+
+    // 2. 임시파일이 정상 Excel인지 검증
+    XLSX.readFile(
+      tempFilePath,
+      {
+        cellDates: true
+      }
+    )
+
+    // 3. 검증된 임시파일을 실제 데이터 파일로 반영
+    copyFileSync(
+      tempFilePath,
+      filePath
+    )
+
+    // 4. 실제 저장된 파일도 다시 검증
+    XLSX.readFile(
+      filePath,
+      {
+        cellDates: true
+      }
+    )
+  } catch (error) {
+    if (
+      isFileAccessError(
+        error
+      )
+    ) {
+      throw new Error(
+        '재고관리 데이터 파일이 Excel에서 열려 있습니다. Excel 파일을 닫은 후 다시 시도해주세요.'
+      )
+    }
+
+    throw error
+  } finally {
+    // 성공/실패와 관계없이 임시파일 정리
+    if (
+      existsSync(
+        tempFilePath
+      )
+    ) {
+      try {
+        unlinkSync(
+          tempFilePath
+        )
+      } catch (cleanupError) {
+        console.error(
+          '임시 데이터 파일을 삭제하지 못했습니다.',
+          cleanupError
+        )
+      }
+    }
   }
-
-  XLSX.writeFile(workbook, tempFilePath, { bookType: 'xlsx', cellDates: true })
-  XLSX.readFile(tempFilePath, { cellDates: true })
-  copyFileSync(tempFilePath, filePath)
-  unlinkSync(tempFilePath)
 }
 
 function readItemsFromExcel() {
@@ -2852,38 +2946,46 @@ function readInventoryAdjustments() {
 }
 
 function cancelTransaction(
-  transactionNo,
-  reason = ''
+    transactionNo,
+    reason = ''
 ) {
-  const dataFilePath =
-    getDataFilePath(dataFileName)
+    const dataFilePath =
+        getDataFilePath(
+            dataFileName
+        )
 
-  if (!existsSync(dataFilePath)) {
-    throw new Error(
-      '재고관리 데이터 파일이 없습니다.'
-    )
-  }
+    if (
+        !existsSync(
+            dataFilePath
+        )
+    ) {
+        throw new Error(
+            '재고관리 데이터 파일이 없습니다.'
+        )
+    }
 
-  const cancelReason =
-    String(
-      reason ?? ''
-    ).trim()
+    const cancelReason =
+        String(
+            reason ?? ''
+        ).trim()
 
-  if (!cancelReason) {
-    throw new Error(
-      '취소 사유를 입력해주세요.'
-    )
-  }
+    if (!cancelReason) {
+        throw new Error(
+            '취소 사유를 입력해주세요.'
+        )
+    }
 
-  runAutoBackupIfNeeded()
+    // 거래 취소도 재고를 변경하므로
+    // 처리 전에 자동 백업
+    runAutoBackupIfNeeded()
 
-  const workbook =
-    XLSX.readFile(
-      dataFilePath,
-      {
-        cellDates: true
-      }
-    )
+    const workbook =
+        XLSX.readFile(
+            dataFilePath,
+            {
+                cellDates: true
+            }
+        )
 
   const transactionRows = readSheetRows(
     workbook,
@@ -3623,58 +3725,89 @@ function hasTodayAutoBackup() {
   )
 }
 
-function cleanupOldBackups(maxCount = 30) {
-  const backupFolderPath = getBackupFolderPath()
+function cleanupOldBackups(
+  maxCount = 30
+) {
+  const backupFolderPath =
+    getBackupFolderPath()
 
-  if (!existsSync(backupFolderPath)) {
+  if (
+    !existsSync(
+      backupFolderPath
+    )
+  ) {
     return {
-      success: true,
       deletedCount: 0
     }
   }
 
-  const backupFiles = readdirSync(backupFolderPath)
-    .filter((fileName) =>
-      fileName.toLowerCase().endsWith('.xlsx')
+  const autoBackupFiles =
+    readdirSync(
+      backupFolderPath
     )
-    .map((fileName) => {
-      const filePath = join(
-        backupFolderPath,
-        fileName
+      .filter((fileName) => {
+        return (
+          fileName.startsWith(
+            'auto_'
+          ) &&
+          fileName
+            .toLowerCase()
+            .endsWith(
+              '.xlsx'
+            )
+        )
+      })
+      .map((fileName) => {
+        const filePath =
+          join(
+            backupFolderPath,
+            fileName
+          )
+
+        const stat =
+          statSync(
+            filePath
+          )
+
+        return {
+          fileName,
+          filePath,
+          mtimeMs:
+            stat.mtimeMs
+        }
+      })
+      .sort(
+        (a, b) =>
+          b.mtimeMs -
+          a.mtimeMs
       )
 
-      const stat = statSync(filePath)
-
-      return {
-        fileName,
-        filePath,
-        modifiedAt: stat.mtime
-      }
-    })
-    .sort(
-      (a, b) =>
-        b.modifiedAt.getTime() -
-        a.modifiedAt.getTime()
-    )
-
-  if (backupFiles.length <= maxCount) {
+  if (
+    autoBackupFiles.length <=
+    maxCount
+  ) {
     return {
-      success: true,
       deletedCount: 0
     }
   }
 
-  const filesToDelete =
-    backupFiles.slice(maxCount)
+  const deleteTargets =
+    autoBackupFiles.slice(
+      maxCount
+    )
 
-  for (const file of filesToDelete) {
-    unlinkSync(file.filePath)
+  for (
+    const backup
+    of deleteTargets
+  ) {
+    unlinkSync(
+      backup.filePath
+    )
   }
 
   return {
-    success: true,
     deletedCount:
-      filesToDelete.length
+      deleteTargets.length
   }
 }
 
@@ -3832,8 +3965,31 @@ function restoreBackup(fileName) {
         beforeRestoreBackup?.fileName ?? ''
     }
   } catch (error) {
-    if (existsSync(tempRestorePath)) {
-      unlinkSync(tempRestorePath)
+    if (
+      existsSync(
+        tempRestorePath
+      )
+    ) {
+      try {
+        unlinkSync(
+          tempRestorePath
+        )
+      } catch (cleanupError) {
+        console.error(
+          '복원 임시파일을 삭제하지 못했습니다.',
+          cleanupError
+        )
+      }
+    }
+
+    if (
+      isFileAccessError(
+        error
+      )
+    ) {
+      throw new Error(
+        '재고관리 데이터 파일이 Excel에서 열려 있습니다. Excel 파일을 닫은 후 다시 복원해주세요.'
+      )
     }
 
     throw error
@@ -3944,13 +4100,24 @@ function getDataStatus() {
 function createWindow() {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1280,
+    height: 800,
+
+    minWidth: 1100,
+    minHeight: 700,
+
     show: false,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
+
+    ...(process.platform === 'linux'
+      ? { icon }
+      : {}),
+
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(
+        __dirname,
+        '../preload/index.js'
+      ),
       sandbox: false
     }
   })

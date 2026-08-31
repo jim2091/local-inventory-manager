@@ -67,6 +67,9 @@ function InventoryAdjustment() {
     const [result, setResult] =
         useState(null)
 
+    const [isSubmitting, setIsSubmitting] =
+        useState(false)
+
     const loadData =
         useCallback(async () => {
             try {
@@ -277,6 +280,12 @@ function InventoryAdjustment() {
                 return
             }
 
+            if (isSubmitting) {
+                return
+            }
+
+            setIsSubmitting(true)
+
             try {
                 const response =
                     await window.inventoryApi
@@ -320,6 +329,8 @@ function InventoryAdjustment() {
                     error.message ||
                     '재고 조정에 실패했습니다.'
                 )
+            } finally {
+                setIsSubmitting(false)
             }
         }
 
@@ -592,8 +603,11 @@ function InventoryAdjustment() {
                         type="button"
                         className="adjustment-submit-button"
                         onClick={submitAdjustment}
+                        disabled={isSubmitting}
                     >
-                        재고 조정 등록
+                        {isSubmitting
+                            ? '조정 중...'
+                            : '재고 조정 등록'}
                     </button>
 
                     {message && (
