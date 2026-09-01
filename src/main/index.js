@@ -52,10 +52,8 @@ const clientColumnMap = {
 }
 
 const dataFileName = '재고관리데이터.xlsx'
-const legacyFileName = '재고관리 프로그램_v1.3.xlsm'
 const tempDataFileName = '재고관리데이터.tmp.xlsx'
 const settingsFileName = 'settings.json'
-const masterSheetNames = ['품목', '매출거래처', '매입거래처']
 const allowedTransactionTypes = ['입고', '출고', '출고반입']
 
 const workbookHeaders = {
@@ -135,14 +133,6 @@ const workbookHeaders = {
   ],
 
   설정: ['항목', '값']
-}
-
-function getDevLocalDataFilePath(fileName) {
-  return join(
-    process.cwd(),
-    'local-data',
-    fileName
-  )
 }
 
 function getDataFolderPath() {
@@ -617,70 +607,6 @@ function buildWorkbookWithDefaultSheets() {
   return workbook
 }
 
-function createDataFileIfMissing() {
-  const filePath = getDataFilePath(dataFileName)
-
-  if (existsSync(filePath)) {
-    return filePath
-  }
-
-  ensureDataFolders()
-  XLSX.writeFile(buildWorkbookWithDefaultSheets(), filePath, { bookType: 'xlsx' })
-
-  return filePath
-}
-
-function getLegacyMasterData() {
-  const legacyFilePath = getDevLocalDataFilePath(legacyFileName)
-  const legacyWorkbook = XLSX.readFile(legacyFilePath, { cellDates: true })
-
-  for (const sheetName of masterSheetNames) {
-    if (!legacyWorkbook.Sheets[sheetName]) {
-      throw new Error(`legacy 파일에 ${sheetName} 시트가 없습니다.`)
-    }
-  }
-
-  const itemRows = readSheetRows(legacyWorkbook, '품목').filter((row) => normalizeCode(row['코드']))
-  const salesClientRows = readSheetRows(legacyWorkbook, '매출거래처').filter((row) =>
-    normalizeCode(row['코드'])
-  )
-  const purchaseClientRows = readSheetRows(legacyWorkbook, '매입거래처').filter((row) =>
-    normalizeCode(row['코드'])
-  )
-
-  validateDuplicateCodes(itemRows, '품목')
-  validateDuplicateCodes(salesClientRows, '매출거래처')
-  validateDuplicateCodes(purchaseClientRows, '매입거래처')
-
-  return {
-    items: itemRows.map((row) => workbookHeaders['품목'].map((header) => row[header] ?? '')),
-    salesClients: salesClientRows.map((row) =>
-      workbookHeaders['매출거래처'].map((header) => row[header] ?? '')
-    ),
-    purchaseClients: purchaseClientRows.map((row) =>
-      workbookHeaders['매입거래처'].map((header) => row[header] ?? '')
-    )
-  }
-}
-
-function importLegacyMasterData() {
-  const dataFilePath = createDataFileIfMissing()
-  const masterData = getLegacyMasterData()
-  const workbook = XLSX.readFile(dataFilePath, { cellDates: true })
-
-  replaceSheet(workbook, '품목', workbookHeaders['품목'], masterData.items)
-  replaceSheet(workbook, '매출거래처', workbookHeaders['매출거래처'], masterData.salesClients)
-  replaceSheet(workbook, '매입거래처', workbookHeaders['매입거래처'], masterData.purchaseClients)
-
-  saveWorkbookSafely(workbook, dataFilePath)
-
-  return {
-    success: true,
-    itemCount: masterData.items.length,
-    salesClientCount: masterData.salesClients.length,
-    purchaseClientCount: masterData.purchaseClients.length
-  }
-}
 
 function readLegacyTransactionRows(legacyWorkbook) {
   const sheet = legacyWorkbook.Sheets['입출고내역']
@@ -1357,119 +1283,6 @@ function formatDateSheet(sheet) {
     if (sheet[cellAddress]) {
       sheet[cellAddress].z = 'yyyy-mm-dd'
     }
-  }
-}
-
-function getLegacyTransactionData(masterWorkbook) {
-  const legacyFilePath = getDevLocalDataFilePath(legacyFileName)
-  const legacyWorkbook = XLSX.readFile(legacyFilePath, { cellDates: true })
-  const legacyRows = readLegacyTransactionRows(legacyWorkbook)
-  const transactionNos = new Set()
-  const duplicateTransactionNos = new Set()
-  const transactionTypeCounts = {
-    입고: 0,
-    출고: 0,
-    출고반입: 0
-  }
-  const missingItemCodes = new Set()
-  const missingClientCodes = new Set()
-  const { itemCodes, clientCodes } = getMasterCodeSets(masterWorkbook)
-  let maxTransactionNo = 0
-  let normalizedReturnCount = 0
-
-  const transactions = legacyRows.map((row) => {
-    const transactionNo = parseTransactionNo(row[0])
-
-    if (transactionNo === null) {
-      throw new Error(`거래번호가 없거나 숫자가 아닌 행이 있습니다: ${row[0]}`)
-    }
-
-    if (transactionNos.has(transactionNo)) {
-      duplicateTransactionNos.add(transactionNo)
-    }
-
-    transactionNos.add(transactionNo)
-    maxTransactionNo = Math.max(maxTransactionNo, transactionNo)
-
-    const transactionType = String(row[2] ?? '').trim()
-
-    if (!allowedTransactionTypes.includes(transactionType)) {
-      throw new Error(`${transactionNo}번 거래에 알 수 없는 구분이 있습니다: ${transactionType}`)
-    }
-
-    const quantity = parseRequiredNumber(row[10], transactionNo, '수량')
-    let normalizedQuantity = quantity
-
-    if (transactionType === '출고반입' && quantity < 0) {
-      normalizedQuantity = Math.abs(quantity)
-      normalizedReturnCount += 1
-    } else if ((transactionType === '입고' || transactionType === '출고') && quantity < 0) {
-      throw new Error(`${transactionNo}번 ${transactionType} 거래의 수량이 음수입니다.`)
-    }
-
-    const itemCode = normalizeCode(row[6])
-    const clientCode = normalizeCode(row[3])
-
-    if (itemCode && !itemCodes.has(itemCode)) {
-      missingItemCodes.add(itemCode)
-    }
-
-    if (clientCode && !clientCodes.has(clientCode)) {
-      missingClientCodes.add(clientCode)
-    }
-
-    transactionTypeCounts[transactionType] += 1
-
-    return [
-      transactionNo,
-      parseLegacyDate(row[1], transactionNo),
-      transactionType,
-      row[3] ?? '',
-      row[4] ?? '',
-      row[6] ?? '',
-      row[7] ?? '',
-      normalizedQuantity,
-      parseOptionalNumber(row[11], transactionNo, '단가'),
-      parseOptionalNumber(row[12], transactionNo, '공급가액'),
-      parseOptionalNumber(row[13], transactionNo, '부가세'),
-      parseOptionalNumber(row[14], transactionNo, '합계'),
-      'N',
-      '',
-      ''
-    ]
-  })
-
-  if (duplicateTransactionNos.size > 0) {
-    throw new Error(`중복 거래번호가 있습니다: ${Array.from(duplicateTransactionNos).join(', ')}`)
-  }
-
-  return {
-    transactions,
-    maxTransactionNo,
-    transactionTypeCounts,
-    normalizedReturnCount,
-    missingItemCodes: Array.from(missingItemCodes),
-    missingClientCodes: Array.from(missingClientCodes)
-  }
-}
-
-function importLegacyTransactions() {
-  const dataFilePath = createDataFileIfMissing()
-  const workbook = XLSX.readFile(dataFilePath, { cellDates: true })
-  const transactionData = getLegacyTransactionData(workbook)
-
-  replaceSheet(workbook, '입출고내역', workbookHeaders['입출고내역'], transactionData.transactions)
-  formatDateSheet(workbook.Sheets['입출고내역'])
-  saveWorkbookSafely(workbook, dataFilePath)
-
-  return {
-    success: true,
-    transactionCount: transactionData.transactions.length,
-    maxTransactionNo: transactionData.maxTransactionNo,
-    transactionTypeCounts: transactionData.transactionTypeCounts,
-    normalizedReturnCount: transactionData.normalizedReturnCount,
-    missingItemCodes: transactionData.missingItemCodes,
-    missingClientCodes: transactionData.missingClientCodes
   }
 }
 
@@ -4152,8 +3965,6 @@ app.whenReady().then(() => {
     () => getDataStatus()
   )
   ipcMain.handle('data-file:create', () => createDataFile())
-  ipcMain.handle('legacy-master-data:import', () => importLegacyMasterData())
-  ipcMain.handle('legacy-transactions:import', () => importLegacyTransactions())
   ipcMain.handle(
     'existing-excel:import',
     () => importExistingExcel()

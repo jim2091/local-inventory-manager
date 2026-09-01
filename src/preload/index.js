@@ -35,18 +35,18 @@ const inventoryApi = {
       reason
     ),
 
-    exportTransactions: (
+  exportTransactions: (
+    transactions
+  ) =>
+    ipcRenderer.invoke(
+      'transactions:export',
       transactions
-    ) =>
-      ipcRenderer.invoke(
-        'transactions:export',
-        transactions
-      ),
+    ),
 
-    openExportFolder: () =>
-      ipcRenderer.invoke(
-        'export:folder:open'
-      ),
+  openExportFolder: () =>
+    ipcRenderer.invoke(
+      'export:folder:open'
+    ),
 
   checkInventory: () =>
     ipcRenderer.invoke(
@@ -111,11 +111,6 @@ const inventoryApi = {
       'existing-excel:import'
     ),
 
-  importLegacyMasterData: () =>
-    ipcRenderer.invoke('legacy-master-data:import'),
-
-  importLegacyTransactions: () =>
-    ipcRenderer.invoke('legacy-transactions:import')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
