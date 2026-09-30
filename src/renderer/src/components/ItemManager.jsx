@@ -1,3 +1,6 @@
+import ConfirmDialog from './common/ConfirmDialog'
+import Toast from './common/Toast'
+import useConfirmation from './common/useConfirmation'
 import {
     useCallback,
     useEffect,
@@ -20,6 +23,7 @@ const emptyForm = {
 }
 
 function ItemManager() {
+  const { confirmation, requestConfirmation, closeConfirmation } = useConfirmation()
     const [items, setItems] =
         useState([])
 
@@ -28,6 +32,16 @@ function ItemManager() {
 
     const [message, setMessage] =
         useState('')
+
+    const [formError, setFormError] =
+        useState('')
+
+    const [successMessage, setSuccessMessage] =
+        useState('')
+
+    const clearSuccessMessage = useCallback(() => {
+        setSuccessMessage('')
+    }, [])
 
     const [selectedCode, setSelectedCode] =
         useState('')
@@ -111,28 +125,36 @@ function ItemManager() {
     const resetForm = () => {
         setForm(emptyForm)
         setSelectedCode('')
-        setMessage('')
+        setFormError('')
     }
 
     const addItem = async () => {
         setMessage('')
+        setFormError('')
+        clearSuccessMessage()
 
         try {
+            for (const [field, label] of [['initialPrice', '기초재고단가'], ['purchasePrice', '매입단가'], ['salesPrice', '매출단가']]) {
+              if (form[field] !== '' && (!Number.isFinite(Number(form[field])) || Number(form[field]) < 0)) throw new Error(`${label}는 0 이상의 숫자로 입력해 주세요.`)
+            }
+            if (!form.code.trim() || !form.name.trim()) throw new Error('품목 코드와 이름을 입력해 주세요.')
+            if (!selectedCode && (!Number.isSafeInteger(Number(form.initialStock || 0)) || Number(form.initialStock) < 0)) throw new Error('기초재고량은 0 이상의 정수로 입력해 주세요.')
             await window.inventoryApi
                 .addItem(
                     buildRequestData()
                 )
 
-            setMessage(
+            setSuccessMessage(
                 '품목을 등록했습니다.'
             )
+            setFormError('')
 
             resetForm()
             loadItems()
         } catch (error) {
             console.error(error)
 
-            setMessage(
+            setFormError(
                 error.message ||
                 '품목 등록에 실패했습니다.'
             )
@@ -178,28 +200,51 @@ function ItemManager() {
         })
 
         setMessage('')
+        setFormError('')
     }
 
     const updateItem = async () => {
         setMessage('')
+        setFormError('')
+        clearSuccessMessage()
 
         try {
-            await window.inventoryApi
+            for (const [field, label] of [['initialPrice', '기초재고단가'], ['purchasePrice', '매입단가'], ['salesPrice', '매출단가']]) {
+              if (form[field] !== '' && (!Number.isFinite(Number(form[field])) || Number(form[field]) < 0)) throw new Error(`${label}는 0 이상의 숫자로 입력해 주세요.`)
+            }
+            if (!form.code.trim() || !form.name.trim()) throw new Error('품목 코드와 이름을 입력해 주세요.')
+            if (!selectedCode && (!Number.isSafeInteger(Number(form.initialStock || 0)) || Number(form.initialStock) < 0)) throw new Error('기초재고량은 0 이상의 정수로 입력해 주세요.')
+            const result = await window.inventoryApi
                 .updateItem(
                     selectedCode,
                     buildRequestData()
                 )
 
-            setMessage(
+            setSelectedCode(result.item.code)
+            setForm({
+                type: result.item.type ?? '',
+                code: result.item.code ?? '',
+                name: result.item.name ?? '',
+                initialPrice: result.item.initialPrice ?? '',
+                purchasePrice: result.item.purchasePrice ?? '',
+                salesPrice: result.item.salesPrice ?? '',
+                initialStock: result.item.initialStock ?? '',
+                currentStock: result.item.currentStock ?? '',
+                unit: result.item.unit ?? '',
+                spec: result.item.spec ?? '',
+                brand: result.item.brand ?? ''
+            })
+
+            setSuccessMessage(
                 '품목을 수정했습니다.'
             )
+            setFormError('')
 
-            resetForm()
             loadItems()
         } catch (error) {
             console.error(error)
 
-            setMessage(
+            setFormError(
                 error.message ||
                 '품목 수정에 실패했습니다.'
             )
@@ -207,13 +252,19 @@ function ItemManager() {
     }
 
     const deleteItem = async (code) => {
+      const target = items.find((entry) => entry.code === code)
+      const accepted = await requestConfirmation({ title: '품목 삭제', confirmLabel: '삭제',
+        message: `다음 품목을 삭제하시겠습니까?\n\n코드: ${code}\n품목명: ${target?.name ?? ''}\n\n삭제한 품목은 자동으로 복구되지 않습니다.` })
+      if (!accepted) return
+
         setMessage('')
+        clearSuccessMessage()
 
         try {
             await window.inventoryApi
                 .deleteItem(code)
 
-            setMessage(
+            setSuccessMessage(
                 '품목을 삭제했습니다.'
             )
 
@@ -311,6 +362,8 @@ function ItemManager() {
 
     return (
         <div className="item-page">
+            <Toast message={successMessage} onClose={clearSuccessMessage} />
+      {confirmation && <ConfirmDialog options={confirmation} onClose={closeConfirmation} />}
             <div className="page-header">
                 <div>
                     <h1>품목 관리</h1>
@@ -495,6 +548,13 @@ function ItemManager() {
                 <div className="item-form-card">
                     <div className="item-form-header">
                         <div>
+                            <span
+                                className={`form-mode-badge ${
+                                    selectedCode ? 'edit' : 'create'
+                                }`}
+                            >
+                                {selectedCode ? '수정 중' : '신규 등록'}
+                            </span>
                             <h2>
                                 {selectedCode
                                     ? '품목 수정'
@@ -750,6 +810,12 @@ function ItemManager() {
                             />
                         </div>
                     </div>
+
+                    {formError && (
+                        <div className="form-error-message" role="alert">
+                            {formError}
+                        </div>
+                    )}
 
                     <div className="item-form-actions">
                         {selectedCode ? (

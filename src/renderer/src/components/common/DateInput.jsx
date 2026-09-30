@@ -1,3 +1,4 @@
+import { functionProp, stringProp } from '../../utils/propTypes'
 import {
     forwardRef,
     useRef
@@ -661,5 +662,8 @@ function DateInput({
         </div>
     )
 }
+
+CalendarButton.propTypes = { onClick: functionProp }
+DateInput.propTypes = { value: stringProp, onChange: functionProp }
 
 export default DateInput

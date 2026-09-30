@@ -125,7 +125,8 @@ function TransactionList() {
         }, [])
 
     const loadSearchOptions =
-        useCallback(async () => {
+        useCallback(() => {
+            return Promise.resolve().then(async () => {
             try {
                 const [
                     salesClients,
@@ -197,6 +198,7 @@ function TransactionList() {
                     '검색용 거래처/품목 목록을 불러오지 못했습니다.'
                 )
             }
+            })
         }, [])
 
 
@@ -349,8 +351,8 @@ function TransactionList() {
                         ).toLowerCase()
 
                     return (
-                        code.startsWith(keyword) ||
-                        name.startsWith(keyword)
+                        code.includes(keyword) ||
+                        name.includes(keyword)
                     )
                 }
             )
@@ -383,8 +385,8 @@ function TransactionList() {
                         ).toLowerCase()
 
                     return (
-                        code.startsWith(keyword) ||
-                        name.startsWith(keyword)
+                        code.includes(keyword) ||
+                        name.includes(keyword)
                     )
                 }
             )
@@ -480,10 +482,10 @@ function TransactionList() {
                             ).toLowerCase()
 
                         if (
-                            !clientCode.startsWith(
+                            !clientCode.includes(
                                 clientKeyword
                             ) &&
-                            !clientName.startsWith(
+                            !clientName.includes(
                                 clientKeyword
                             )
                         ) {
@@ -503,10 +505,10 @@ function TransactionList() {
                             ).toLowerCase()
 
                         if (
-                            !itemCode.startsWith(
+                            !itemCode.includes(
                                 itemKeyword
                             ) &&
-                            !itemName.startsWith(
+                            !itemName.includes(
                                 itemKeyword
                             )
                         ) {
@@ -576,8 +578,6 @@ function TransactionList() {
                     ) {
                         return false
                     }
-
-                    return true
 
                     return true
                 })
@@ -1590,22 +1590,6 @@ function TransactionList() {
                 <table className="transaction-table">
                     <thead>
                         <tr>
-                            <th>
-                                <button
-                                    type="button"
-                                    className="table-sort-button"
-                                    onClick={() =>
-                                        changeSort(
-                                            'transactionNo'
-                                        )
-                                    }
-                                >
-                                    번호
-                                    {getSortMark(
-                                        'transactionNo'
-                                    )}
-                                </button>
-                            </th>
 
                             <th>
                                 <button
@@ -1670,6 +1654,9 @@ function TransactionList() {
                                     )}
                                 </button>
                             </th>
+
+                            <th><button type="button" className="table-sort-button" onClick={() => changeSort('spec')}>규격{getSortMark('spec')}</button></th>
+                            <th><button type="button" className="table-sort-button" onClick={() => changeSort('unit')}>단위{getSortMark('unit')}</button></th>
 
                             <th>
                                 <button
@@ -1778,7 +1765,7 @@ function TransactionList() {
                             0 ? (
                             <tr>
                                 <td
-                                    colSpan="12"
+                                    colSpan="13"
                                     className="empty-table-cell"
                                 >
                                     조회된 입출고 내역이 없습니다.
@@ -1798,11 +1785,6 @@ function TransactionList() {
                                                 : ''
                                         }
                                     >
-                                        <td>
-                                            {
-                                                transaction.transactionNo
-                                            }
-                                        </td>
 
                                         <td>
                                             {transaction.date}
@@ -1817,13 +1799,13 @@ function TransactionList() {
                                         </td>
 
                                         <td>
-                                            <div className="table-main-text">
+                                            <div className="table-main-text" title={String(transaction.clientName ?? '')}>
                                                 {
                                                     transaction.clientName
                                                 }
                                             </div>
 
-                                            <div className="table-sub-text">
+                                            <div className="table-sub-text" title={String(transaction.clientCode ?? '')}>
                                                 {
                                                     transaction.clientCode
                                                 }
@@ -1831,18 +1813,21 @@ function TransactionList() {
                                         </td>
 
                                         <td>
-                                            <div className="table-main-text">
+                                            <div className="table-main-text" title={String(transaction.itemName ?? '')}>
                                                 {
                                                     transaction.itemName
                                                 }
                                             </div>
 
-                                            <div className="table-sub-text">
+                                            <div className="table-sub-text" title={String(transaction.itemCode ?? '')}>
                                                 {
                                                     transaction.itemCode
                                                 }
                                             </div>
                                         </td>
+
+                                        <td title={String(transaction.spec ?? '')}>{transaction.spec}</td>
+                                        <td title={String(transaction.unit ?? '')}>{transaction.unit}</td>
 
                                         <td className="number-cell">
                                             {formatNumber(
@@ -1882,7 +1867,7 @@ function TransactionList() {
                                                         취소
                                                     </span>
 
-                                                    <div className="cancel-reason-preview">
+                                                    <div className="cancel-reason-preview" title={transaction.cancelReason}>
                                                         {transaction.cancelReason ||
                                                             '사유 없음'}
                                                     </div>

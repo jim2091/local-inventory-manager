@@ -1,3 +1,6 @@
+import ConfirmDialog from './common/ConfirmDialog'
+import Toast from './common/Toast'
+import useConfirmation from './common/useConfirmation'
 import {
   useCallback,
   useEffect,
@@ -23,6 +26,7 @@ const emptyForm = {
 }
 
 function ClientManager() {
+  const { confirmation, requestConfirmation, closeConfirmation } = useConfirmation()
   const [clientType, setClientType] =
     useState('sales')
 
@@ -37,6 +41,16 @@ function ClientManager() {
 
   const [message, setMessage] =
     useState('')
+
+  const [formError, setFormError] =
+    useState('')
+
+  const [successMessage, setSuccessMessage] =
+    useState('')
+
+  const clearSuccessMessage = useCallback(() => {
+    setSuccessMessage('')
+  }, [])
 
   const [keyword, setKeyword] =
     useState('')
@@ -70,35 +84,40 @@ function ClientManager() {
   const resetForm = () => {
     setForm(emptyForm)
     setSelectedCode('')
-    setMessage('')
+    setFormError('')
   }
 
   const changeClientType = (type) => {
     setClientType(type)
     setKeyword('')
     resetForm()
+    setMessage('')
   }
 
   const addClient = async () => {
     setMessage('')
+    setFormError('')
+    clearSuccessMessage()
 
     try {
+      if (!form.code.trim() || !form.name.trim()) throw new Error('거래처 코드와 이름을 입력해 주세요.')
       await window.inventoryApi
         .addClient(
           clientType,
           form
         )
 
-      setMessage(
+      setSuccessMessage(
         '거래처를 등록했습니다.'
       )
+      setFormError('')
 
       resetForm()
       loadClients()
     } catch (error) {
       console.error(error)
 
-      setMessage(
+      setFormError(
         error.message ||
         '거래처 등록에 실패했습니다.'
       )
@@ -126,29 +145,51 @@ function ClientManager() {
     })
 
     setMessage('')
+    setFormError('')
   }
 
   const updateClient = async () => {
     setMessage('')
+    setFormError('')
+    clearSuccessMessage()
 
     try {
-      await window.inventoryApi
+      if (!form.code.trim() || !form.name.trim()) throw new Error('거래처 코드와 이름을 입력해 주세요.')
+      const result = await window.inventoryApi
         .updateClient(
           clientType,
           selectedCode,
           form
         )
 
-      setMessage(
+      setSelectedCode(result.client.code)
+      setForm({
+        code: result.client.code ?? '',
+        category: result.client.category ?? '',
+        type: result.client.type ?? '',
+        name: result.client.name ?? '',
+        businessNumber: result.client.businessNumber ?? '',
+        representative: result.client.representative ?? '',
+        businessAddress: result.client.businessAddress ?? '',
+        businessType: result.client.businessType ?? '',
+        businessItem: result.client.businessItem ?? '',
+        phone: result.client.phone ?? '',
+        fax: result.client.fax ?? '',
+        mobile: result.client.mobile ?? '',
+        homepage: result.client.homepage ?? '',
+        actualAddress: result.client.actualAddress ?? ''
+      })
+
+      setSuccessMessage(
         '거래처를 수정했습니다.'
       )
+      setFormError('')
 
-      resetForm()
       loadClients()
     } catch (error) {
       console.error(error)
 
-      setMessage(
+      setFormError(
         error.message ||
         '거래처 수정에 실패했습니다.'
       )
@@ -156,7 +197,13 @@ function ClientManager() {
   }
 
   const deleteClient = async (code) => {
+      const target = clients.find((entry) => entry.code === code)
+      const accepted = await requestConfirmation({ title: '거래처 삭제', confirmLabel: '삭제',
+        message: `다음 거래처를 삭제하시겠습니까?\n\n코드: ${code}\n거래처명: ${target?.name ?? ''}\n\n삭제한 거래처는 자동으로 복구되지 않습니다.` })
+      if (!accepted) return
+
     setMessage('')
+    clearSuccessMessage()
 
     try {
       await window.inventoryApi
@@ -165,7 +212,7 @@ function ClientManager() {
           code
         )
 
-      setMessage(
+      setSuccessMessage(
         '거래처를 삭제했습니다.'
       )
 
@@ -225,6 +272,8 @@ function ClientManager() {
 
   return (
     <div className="client-page">
+      <Toast message={successMessage} onClose={clearSuccessMessage} />
+      {confirmation && <ConfirmDialog options={confirmation} onClose={closeConfirmation} />}
       <div className="page-header">
         <div>
           <h1>거래처 관리</h1>
@@ -410,6 +459,13 @@ function ClientManager() {
 
         <div className="client-form-card">
           <div className="client-form-header">
+            <span
+              className={`form-mode-badge ${
+                selectedCode ? 'edit' : 'create'
+              }`}
+            >
+              {selectedCode ? '수정 중' : '신규 등록'}
+            </span>
             <h2>
               {selectedCode
                 ? '거래처 수정'
@@ -610,6 +666,12 @@ function ClientManager() {
               {currentTitle}
             </span>
           </div>
+
+          {formError && (
+            <div className="form-error-message" role="alert">
+              {formError}
+            </div>
+          )}
 
           <div className="client-form-actions">
             {selectedCode ? (

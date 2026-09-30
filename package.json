@@ -1,6 +1,6 @@
 {
   "name": "local-inventory-manager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Excel 기반 로컬 재고관리 프로그램",
   "main": "./out/main/index.js",
   "author": "ljb",
@@ -14,7 +14,8 @@
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
-    "build:linux": "npm run build && electron-builder --linux"
+    "build:linux": "npm run build && electron-builder --linux",
+    "test": "node --test scripts/test-data-safety.cjs"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",

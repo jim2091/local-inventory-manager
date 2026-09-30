@@ -65,3 +65,6 @@ export/
 test-output/
 temp/
 tmp/
+
+# diff파일
+docs/LAST_CHANGE.diff
