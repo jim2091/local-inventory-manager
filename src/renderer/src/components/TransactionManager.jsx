@@ -1,3 +1,5 @@
+import ConfirmDialog from './common/ConfirmDialog'
+import useConfirmation from './common/useConfirmation'
 import {
     useEffect,
     useRef,
@@ -26,6 +28,7 @@ const emptyForm = {
 }
 
 function TransactionManager() {
+  const { confirmation, requestConfirmation, closeConfirmation } = useConfirmation()
   const [form, setForm] = useState(emptyForm)
 
   const [items, setItems] = useState([])
@@ -124,30 +127,6 @@ function TransactionManager() {
     }))
   }
 
-  const changeItem = (e) => {
-    const itemCode = e.target.value
-
-    const item = items.find(
-      (item) => item.code === itemCode
-    )
-
-    let defaultPrice = ''
-
-    if (item) {
-      if (form.type === '입고') {
-        defaultPrice = item.purchasePrice ?? ''
-      } else {
-        defaultPrice = item.salesPrice ?? ''
-      }
-    }
-
-    setForm((prev) => ({
-      ...prev,
-      itemCode,
-      unitPrice: defaultPrice
-    }))
-  }
-
   const changeTransactionType = (e) => {
     const type = e.target.value
 
@@ -187,15 +166,21 @@ function TransactionManager() {
     setResult(null)
 
     try {
-      const response =
-        await window.inventoryApi.addTransaction({
-          date: form.date,
-          type: form.type,
-          clientCode: form.clientCode,
-          itemCode: form.itemCode,
-          quantity: Number(form.quantity),
-          unitPrice: Number(form.unitPrice)
-        })
+      const request = { ...form }
+      if (!['입고', '출고', '출고반입'].includes(request.type)) throw new Error('올바른 입출고 구분을 선택해 주세요.')
+      if (!request.itemCode || !request.clientCode) throw new Error('품목과 거래처를 선택해 주세요.')
+      if (!Number.isSafeInteger(Number(request.quantity)) || Number(request.quantity) < 1) throw new Error('수량은 1 이상의 정수로 입력해 주세요.')
+      if (request.unitPrice === '' || !Number.isFinite(Number(request.unitPrice)) || Number(request.unitPrice) < 0) throw new Error('단가는 0 이상의 숫자로 입력해 주세요.')
+      const date = new Date(`${request.date}T00:00:00`)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(request.date) || Number.isNaN(date.getTime()) ||
+          date.getMonth() + 1 !== Number(request.date.slice(5, 7)) || date.getDate() !== Number(request.date.slice(8))) throw new Error('올바른 거래 일자를 입력해 주세요.')
+      let response = await window.inventoryApi.addTransaction(request)
+      if (response.requiresStockConfirmation) {
+        const accepted = await requestConfirmation({ title: '재고 부족 확인', confirmLabel: '출고 등록',
+          message: `현재재고: ${response.previousStock}\n출고수량: ${request.quantity}\n출고 후 예상재고: ${response.currentStock}\n\n재고가 음수가 됩니다.\n그래도 출고 등록하시겠습니까?` })
+        if (!accepted) { setMessage('출고 등록을 취소했습니다. 거래와 재고는 변경되지 않았습니다.'); return }
+        response = await window.inventoryApi.addTransaction({ ...request, allowNegativeStock: true })
+      }
 
       setResult(response)
 
@@ -263,7 +248,7 @@ function TransactionManager() {
       }
 
       const text =
-        `${item.code} ${item.name}`.toLowerCase()
+        `${item.code} ${item.name} ${item.brand} ${item.spec}`.toLowerCase()
 
       return text.includes(keyword)
     })
@@ -330,6 +315,7 @@ function TransactionManager() {
 
   return (
     <div className="transaction-page">
+      {confirmation && <ConfirmDialog options={confirmation} onClose={closeConfirmation} />}
       <div className="page-header">
         <div>
           <h1>입출고 등록</h1>

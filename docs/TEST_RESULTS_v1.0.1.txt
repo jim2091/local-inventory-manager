@@ -1,0 +1,73 @@
+v1.0.1 검증 기록 — 2026-09-22
+
+실제 Main 데이터 함수 + 임시 Documents 폴더. Electron OS API는 대역.
+Windows GUI, 실제 파일 잠금 및 NSIS 실행은 미검증.
+
+[테스트]
+INVENTORY_LEGACY_FIXTURE에 첨부 XLSM을 지정하여 npm test 실행
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> local-inventory-manager@1.0.1 test
+> node --test scripts/test-data-safety.cjs
+
+✔ new file / required six sheets / malformed rows and missing master warnings (81.439577ms)
+✔ v1.0.0 migration preserves every historical value and current stock; idempotent (116.561605ms)
+✔ three transaction types, negative approval, stale approval, snapshot and cancellation (152.714298ms)
+✔ client CRUD preserves 14 details plus custom column, other rows and both client types (93.926921ms)
+✔ Main input validation, actual/delta adjustments, history and reconciliation (115.499786ms)
+✔ recovery: missing live + previous (67.768557ms)
+✔ recovery: missing live + temporary (60.141657ms)
+✔ recovery: corrupt live + previous (233.460745ms)
+✔ recovery: corrupt live + temporary (71.523612ms)
+✔ normal live wins with both candidates; missing live does not create a blank file (53.110955ms)
+✔ save fault temp-write: never rolls live back to stale previous (35.409867ms)
+✔ save fault temp-validation: never rolls live back to stale previous (33.001507ms)
+✔ save fault previous-copy: never rolls live back to stale previous (35.573364ms)
+✔ save fault replace-locked: never rolls live back to stale previous (37.066045ms)
+✔ post-replace validation failure restores the immediately previous live bytes (40.944622ms)
+✔ rollback failure preserves previous and archive recovery candidates (37.007957ms)
+✔ backup settings, once-a-day backup, cleanup, legacy restore and invalid restore (69.051368ms)
+✔ export retains snapshots and totals without using managed-workbook validation (42.742152ms)
+✔ IPC envelope hides internal paths, exposes actionable validation errors (1.49887ms)
+✔ real legacy XLSM import preserves source hash, snapshots, amounts and current stock (221.895511ms)
+✔ startup rejects missing/duplicate keys, invalid dates, types, quantities and cancellation flags (48.013129ms)
+✔ legacy import keeps additional client headers and values; cancel leaves current data intact (43.354346ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1901.735566
+
+[빌드]
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> local-inventory-manager@1.0.1 build
+> electron-vite build
+
+vite v7.3.6 building ssr environment for production...
+transforming...
+✓ 2 modules transformed.
+rendering chunks...
+out/main/index.js  84.95 kB
+✓ built in 227ms
+vite v7.3.6 building ssr environment for production...
+transforming...
+✓ 1 modules transformed.
+rendering chunks...
+out/preload/index.js  2.94 kB
+✓ built in 16ms
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 881 modules transformed.
+rendering chunks...
+../../out/renderer/index.html                     0.55 kB
+../../out/renderer/assets/index-CpdGoAVm.css     85.94 kB
+../../out/renderer/assets/index-C970cerX.js   1,162.41 kB
+✓ built in 2.94s
+
+[Lint]
+npm run lint: exit 0, 0 errors, 3549 warnings (모두 prettier/prettier).
+원본 검사: 8 errors, 3550 warnings. 규칙 비활성화 없음.

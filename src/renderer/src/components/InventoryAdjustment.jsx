@@ -71,7 +71,8 @@ function InventoryAdjustment() {
         useState(false)
 
     const loadData =
-        useCallback(async () => {
+        useCallback(() => {
+            return Promise.resolve().then(async () => {
             try {
                 const [
                     itemData,
@@ -95,6 +96,7 @@ function InventoryAdjustment() {
                     '재고 조정 데이터를 불러오지 못했습니다.'
                 )
             }
+            })
         }, [])
 
     useEffect(() => {
@@ -246,14 +248,9 @@ function InventoryAdjustment() {
                 return
             }
 
-            if (
-                adjustmentMode === 'actual' &&
-                !Number.isInteger(
-                    Number(form.actualStock)
-                )
-            ) {
+            if (adjustmentMode === 'actual' && (!Number.isSafeInteger(Number(form.actualStock)) || Number(form.actualStock) < 0)) {
                 setMessage(
-                    '실제 재고수량은 정수로 입력해주세요.'
+                    '실제 재고수량은 0 이상의 정수로 입력해주세요.'
                 )
                 return
             }
@@ -291,6 +288,8 @@ function InventoryAdjustment() {
                     await window.inventoryApi
                         .addInventoryAdjustment({
                             date: form.date,
+                            mode: adjustmentMode,
+                            actualStock: form.actualStock,
                             itemCode:
                                 form.itemCode,
                             quantity:
@@ -561,6 +560,7 @@ function InventoryAdjustment() {
                                 <input
                                     type="number"
                                     name="actualStock"
+                                    min="0"
                                     step="1"
                                     value={form.actualStock}
                                     onChange={changeForm}

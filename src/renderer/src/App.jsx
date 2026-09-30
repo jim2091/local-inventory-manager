@@ -1,3 +1,4 @@
+import DataRecovery from './components/DataRecovery'
 import {
   useEffect,
   useState
@@ -34,6 +35,12 @@ import InventoryAdjustment
   from './components/InventoryAdjustment'
 
 function App() {
+  const [dataStatus, setDataStatus] = useState(null)
+  const refreshStatus = async () => {
+    const result = await window.inventoryApi.getDataStatus()
+    setDataStatus(result)
+    setDataReady(result.ready)
+  }
   const [dataReady, setDataReady] =
     useState(null)
 
@@ -44,28 +51,32 @@ function App() {
     window.inventoryApi
       .getDataStatus()
       .then((result) => {
-        setDataReady(result.exists)
+        setDataStatus(result)
+        setDataReady(result.ready)
       })
       .catch((error) => {
         console.error(error)
+        setDataStatus({ blocked: true, errors: [error.message || '데이터를 확인하지 못했습니다.'], candidates: [] })
         setDataReady(false)
       })
   }, [])
 
   if (dataReady === null) {
     return (
-      <div>
+      <div className="setup-page">
         프로그램을 준비하고 있습니다.
       </div>
     )
   }
 
+  if (dataStatus?.blocked || dataStatus?.recoveryRequired) {
+    return <DataRecovery status={dataStatus} onComplete={refreshStatus} />
+  }
+
   if (!dataReady) {
     return (
       <FirstRunSetup
-        onComplete={() =>
-          setDataReady(true)
-        }
+        onComplete={refreshStatus}
       />
     )
   }
@@ -241,6 +252,9 @@ function App() {
       </div>
 
       <div className="content">
+        {dataStatus?.warnings?.length > 0 && <details className="startup-notice"><summary>데이터 확인 안내 ({dataStatus.warnings.length}건)</summary>
+          <ul>{dataStatus.warnings.map((warning, i) => <li key={i}>{warning}</li>)}</ul>
+        </details>}
         {renderContent()}
       </div>
     </div>

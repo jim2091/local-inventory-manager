@@ -1,35 +1,43 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
+async function invokeInventory(channel, ...args) {
+  let response
+  try { response = await ipcRenderer.invoke(channel, ...args) }
+  catch { throw new Error('프로그램과 연결하지 못했습니다. 다시 실행해 주세요.') }
+  if (!response?.ok) throw new Error(response?.message || '작업을 완료하지 못했습니다.')
+  return response.value
+}
+
 // Custom APIs for renderer
 const inventoryApi = {
-  getItems: () => ipcRenderer.invoke('items:get'),
-  addItem: (item) => ipcRenderer.invoke('items:add', item),
+  getItems: () => invokeInventory('items:get'),
+  addItem: (item) => invokeInventory('items:add', item),
   updateItem: (originalCode, item) =>
-    ipcRenderer.invoke('items:update', originalCode, item),
+    invokeInventory('items:update', originalCode, item),
   deleteItem: (code) =>
-    ipcRenderer.invoke('items:delete', code),
+    invokeInventory('items:delete', code),
 
   getClients: (clientType) =>
-    ipcRenderer.invoke('clients:get', clientType),
+    invokeInventory('clients:get', clientType),
 
   addClient: (clientType, client) =>
-    ipcRenderer.invoke('clients:add', clientType, client),
+    invokeInventory('clients:add', clientType, client),
 
   updateClient: (clientType, originalCode, client) =>
-    ipcRenderer.invoke('clients:update', clientType, originalCode, client),
+    invokeInventory('clients:update', clientType, originalCode, client),
 
   deleteClient: (clientType, code) =>
-    ipcRenderer.invoke('clients:delete', clientType, code),
+    invokeInventory('clients:delete', clientType, code),
 
   getTransactions: () =>
-    ipcRenderer.invoke('transactions:get'),
+    invokeInventory('transactions:get'),
 
   addTransaction: (transaction) =>
-    ipcRenderer.invoke('transactions:add', transaction),
+    invokeInventory('transactions:add', transaction),
 
   cancelTransaction: (transactionNo, reason) =>
-    ipcRenderer.invoke(
+    invokeInventory(
       'transactions:cancel',
       transactionNo,
       reason
@@ -38,76 +46,78 @@ const inventoryApi = {
   exportTransactions: (
     transactions
   ) =>
-    ipcRenderer.invoke(
+    invokeInventory(
       'transactions:export',
       transactions
     ),
 
   openExportFolder: () =>
-    ipcRenderer.invoke(
+    invokeInventory(
       'export:folder:open'
     ),
 
   checkInventory: () =>
-    ipcRenderer.invoke(
+    invokeInventory(
       'inventory:check'
     ),
 
   getInventoryAdjustments: () =>
-    ipcRenderer.invoke(
+    invokeInventory(
       'inventory-adjustments:get'
     ),
 
   addInventoryAdjustment: (
     adjustment
   ) =>
-    ipcRenderer.invoke(
+    invokeInventory(
       'inventory-adjustments:add',
       adjustment
     ),
 
   createBackup: () =>
-    ipcRenderer.invoke(
+    invokeInventory(
       'backup:create'
     ),
 
   getBackups: () =>
-    ipcRenderer.invoke(
+    invokeInventory(
       'backup:list'
     ),
 
   restoreBackup: (fileName) =>
-    ipcRenderer.invoke(
+    invokeInventory(
       'backup:restore',
       fileName
   ),
 
   getBackupSettings: () =>
-    ipcRenderer.invoke(
+    invokeInventory(
       'backup:settings:get'
     ),
 
   saveBackupSettings: (settings) =>
-    ipcRenderer.invoke(
+    invokeInventory(
       'backup:settings:save',
       settings
     ),
 
   openBackupFolder: () =>
-    ipcRenderer.invoke(
+    invokeInventory(
       'backup:folder:open'
     ),
 
+  recoverData: (kind) => invokeInventory('data-file:recover', kind),
+
   getDataStatus: () =>
-    ipcRenderer.invoke(
+    invokeInventory(
       'data-file:status'
     ),
 
   createDataFile: () =>
-    ipcRenderer.invoke('data-file:create'),
+    invokeInventory('data-file:create'),
 
   importExistingExcel: () =>
-    ipcRenderer.invoke(
+    invokeInventory(
       'existing-excel:import'
     ),
 

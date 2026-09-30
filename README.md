@@ -1,4 +1,6 @@
 # local-inventory-manager
+
+현재 개선 버전: **v1.0.1** — [릴리스 노트](docs/RELEASE_v1.0.1.md) · [작업 보고서](docs/WORK_REPORT_v1.0.1.md)
 아부지 요청으로 간단한 개인 사업자용 재고관리 엑셀파일 관리 프로그램
 
 # 재고관리 프로그램
