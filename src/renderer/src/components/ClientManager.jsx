@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState
 } from 'react'
 
@@ -25,6 +26,26 @@ const emptyForm = {
   actualAddress: ''
 }
 
+const clientFields = [
+  ['code', '코드'], ['category', '구분'], ['type', '유형'], ['name', '거래처명'],
+  ['businessNumber', '사업자(주민)번호'], ['representative', '대표자명'],
+  ['businessAddress', '사업장주소1'], ['businessType', '업태'], ['businessItem', '종목'],
+  ['phone', '전화'], ['fax', '팩스'], ['mobile', '휴대폰'],
+  ['homepage', '홈페이지주소'], ['actualAddress', '실제주소1']
+]
+const clientColumns = [
+  ['code', '코드', 'client-code-column'], ['name', '거래처명', 'client-name-column'],
+  ['representative', '대표자', 'client-representative-column'], ['contact', '연락처', 'client-contact-column'],
+  ['classification', '구분/유형', 'client-classification-column'],
+  ['businessNumber', '사업자(주민)번호', 'client-business-column'],
+  ['businessAddress', '사업장 주소', 'client-address-column']
+]
+const listValue = (client, key) => {
+  if (key === 'contact') return client.phone || client.mobile || '-'
+  if (key === 'classification') return [client.category, client.type].filter(Boolean).join(' / ') || '-'
+  return client[key] || '-'
+}
+
 function ClientManager() {
   const { confirmation, requestConfirmation, closeConfirmation } = useConfirmation()
   const [clientType, setClientType] =
@@ -38,6 +59,16 @@ function ClientManager() {
 
   const [selectedCode, setSelectedCode] =
     useState('')
+
+  const [mode, setMode] = useState(null)
+  const [selectedClient, setSelectedClient] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const pendingRef = useRef(false)
+  const modalRef = useRef(null)
+  const returnFocusRef = useRef(null)
+  const createButtonRef = useRef(null)
+  const loadSequenceRef = useRef(0)
+  const firstInputRef = useRef(null)
 
   const [message, setMessage] =
     useState('')
@@ -56,10 +87,16 @@ function ClientManager() {
     useState('')
 
   const loadClients = useCallback(() => {
-    window.inventoryApi
+    const sequence = ++loadSequenceRef.current
+    return window.inventoryApi
       .getClients(clientType)
-      .then(setClients)
+      .then((result) => {
+        if (sequence !== loadSequenceRef.current) return
+        setClients(result)
+        setMessage('')
+      })
       .catch((error) => {
+        if (sequence !== loadSequenceRef.current) return
         console.error(error)
 
         setMessage(
@@ -87,15 +124,83 @@ function ClientManager() {
     setFormError('')
   }
 
+  useEffect(() => {
+    if (confirmation) return
+    if (mode === 'detail') modalRef.current?.focus()
+    else if (mode) firstInputRef.current?.focus()
+  }, [mode, confirmation])
+
+  const closeModal = () => {
+    setMode(null)
+    setFormError('')
+    requestAnimationFrame(() => {
+      const target = returnFocusRef.current
+      if (target?.isConnected) target.focus()
+      else createButtonRef.current?.focus()
+    })
+  }
+
+  const openCreateForm = () => {
+    returnFocusRef.current = document.activeElement
+    resetForm()
+    setSelectedClient(null)
+    setMode('create')
+  }
+
+  const handleModalKeyDown = (event) => {
+    if (confirmation || event.defaultPrevented) return
+    if (event.key === 'Escape') {
+      if (busy || pendingRef.current) return
+      event.preventDefault()
+      event.stopPropagation()
+      closeModal()
+      return
+    }
+    if (event.key === 'Enter' && (mode === 'create' || mode === 'edit')
+      && event.target.matches('input:not([type=button]):not([type=submit]):not([type=reset]):not([type=image]):not([type=checkbox]):not([type=radio]), select')) {
+      if (event.nativeEvent?.isComposing || event.nativeEvent?.keyCode === 229) return
+      event.preventDefault()
+      if (busy || pendingRef.current || event.repeat) return
+      if (mode === 'create') addClient()
+      else updateClient()
+      return
+    }
+    if (event.key !== 'Tab') return
+    const controls = [...modalRef.current.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')]
+      .filter((element) => element.getClientRects().length && element.tabIndex >= 0
+          && !element.matches(':disabled') && !element.closest('[hidden], [inert]')
+          && !['hidden', 'collapse'].includes(getComputedStyle(element).visibility))
+    const first = controls[0]
+    const last = controls[controls.length - 1]
+    if (!first) { event.preventDefault(); return }
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === modalRef.current)) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === modalRef.current)) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+
   const changeClientType = (type) => {
+    if (pendingRef.current) return
+    if (type !== clientType) {
+      ++loadSequenceRef.current
+      setClients([])
+    }
     setClientType(type)
     setKeyword('')
     resetForm()
+    setSelectedClient(null)
+    setMode(null)
     setMessage('')
+    clearSuccessMessage()
   }
 
   const addClient = async () => {
-    setMessage('')
+    if (pendingRef.current) return
+    pendingRef.current = true
+    setBusy(true)
     setFormError('')
     clearSuccessMessage()
 
@@ -113,6 +218,7 @@ function ClientManager() {
       setFormError('')
 
       resetForm()
+      requestAnimationFrame(() => firstInputRef.current?.focus())
       loadClients()
     } catch (error) {
       console.error(error)
@@ -121,10 +227,16 @@ function ClientManager() {
         error.message ||
         '거래처 등록에 실패했습니다.'
       )
+    } finally {
+      pendingRef.current = false
+      setBusy(false)
     }
   }
 
-  const selectClient = (client) => {
+  const selectClient = (client, opening = true) => {
+    if (opening) returnFocusRef.current = document.activeElement
+    setSelectedClient(client)
+    setMode('detail')
     setSelectedCode(client.code)
 
     setForm({
@@ -144,12 +256,13 @@ function ClientManager() {
       actualAddress: client.actualAddress ?? ''
     })
 
-    setMessage('')
     setFormError('')
   }
 
   const updateClient = async () => {
-    setMessage('')
+    if (pendingRef.current) return
+    pendingRef.current = true
+    setBusy(true)
     setFormError('')
     clearSuccessMessage()
 
@@ -162,6 +275,8 @@ function ClientManager() {
           form
         )
 
+      setSelectedClient(result.client)
+      setMode('detail')
       setSelectedCode(result.client.code)
       setForm({
         code: result.client.code ?? '',
@@ -193,16 +308,26 @@ function ClientManager() {
         error.message ||
         '거래처 수정에 실패했습니다.'
       )
+    } finally {
+      pendingRef.current = false
+      setBusy(false)
     }
   }
 
   const deleteClient = async (code) => {
+      if (pendingRef.current) return
+      pendingRef.current = true
+      setBusy(true)
+      setFormError('')
       const target = clients.find((entry) => entry.code === code)
       const accepted = await requestConfirmation({ title: '거래처 삭제', confirmLabel: '삭제',
         message: `다음 거래처를 삭제하시겠습니까?\n\n코드: ${code}\n거래처명: ${target?.name ?? ''}\n\n삭제한 거래처는 자동으로 복구되지 않습니다.` })
-      if (!accepted) return
+      if (!accepted) {
+        pendingRef.current = false
+        setBusy(false)
+        return
+      }
 
-    setMessage('')
     clearSuccessMessage()
 
     try {
@@ -216,18 +341,21 @@ function ClientManager() {
         '거래처를 삭제했습니다.'
       )
 
-      if (selectedCode === code) {
-        resetForm()
-      }
+      resetForm()
+      returnFocusRef.current = createButtonRef.current
+      closeModal()
 
       loadClients()
     } catch (error) {
       console.error(error)
 
-      setMessage(
+      setFormError(
         error.message ||
         '거래처 삭제에 실패했습니다.'
       )
+    } finally {
+      pendingRef.current = false
+      setBusy(false)
     }
   }
 
@@ -271,9 +399,10 @@ function ClientManager() {
       : '매입거래처'
 
   return (
-    <div className="client-page">
+    <div className={`client-page ${mode ? 'modal-open' : ''}`}>
       <Toast message={successMessage} onClose={clearSuccessMessage} />
       {confirmation && <ConfirmDialog options={confirmation} onClose={closeConfirmation} />}
+      <div inert={Boolean(mode)}>
       <div className="page-header">
         <div>
           <h1>거래처 관리</h1>
@@ -330,7 +459,7 @@ function ClientManager() {
         </div>
       )}
 
-      <div className="client-layout">
+
         <div className="client-list-card">
           <div className="client-list-header">
             <div>
@@ -347,7 +476,8 @@ function ClientManager() {
             <button
               type="button"
               className="primary-small-button"
-              onClick={resetForm}
+              ref={createButtonRef}
+              onClick={openCreateForm}
             >
               새 거래처 등록
             </button>
@@ -369,116 +499,53 @@ function ClientManager() {
           <div className="client-table-wrapper">
             <table className="client-table">
               <thead>
-                <tr>
-                  <th>코드</th>
-                  <th>거래처명</th>
-                  <th>대표자</th>
-                  <th>전화</th>
-                  <th>사업자번호</th>
-                  <th>관리</th>
-                </tr>
+                <tr>{clientColumns.map(([key, label, className]) => <th key={key} className={className}>{label}</th>)}</tr>
               </thead>
-
               <tbody>
                 {filteredClients.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan="6"
-                      className="empty-table-cell"
-                    >
-                      조회된 거래처가 없습니다.
-                    </td>
+                  <tr><td colSpan={clientColumns.length} className="empty-table-cell">조회된 거래처가 없습니다.</td></tr>
+                ) : filteredClients.map((client) => (
+                  <tr key={client.code} tabIndex={0} aria-label={`${client.code} ${client.name} 상세 보기`}
+                    onClick={(event) => { event.currentTarget.focus(); selectClient(client) }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        selectClient(client)
+                      }
+                    }}>
+                    {clientColumns.map(([key, , className]) => (
+                      <td key={key} className={`${className} ${key === 'code' ? 'client-code-cell' : ''}`}
+                        title={String(listValue(client, key))}>{listValue(client, key)}</td>
+                    ))}
                   </tr>
-                ) : (
-                  filteredClients.map(
-                    (client, index) => (
-                      <tr
-                        key={`${client.code}-${index}`}
-                        className={
-                          selectedCode === client.code
-                            ? 'selected-client-row'
-                            : ''
-                        }
-                        onClick={() =>
-                          selectClient(client)
-                        }
-                      >
-                        <td className="client-code-cell">
-                          {client.code}
-                        </td>
-
-                        <td className="client-name-cell">
-                          {client.name}
-                        </td>
-
-                        <td>
-                          {client.representative || '-'}
-                        </td>
-
-                        <td>
-                          {client.phone || client.mobile || '-'}
-                        </td>
-
-                        <td>
-                          {client.businessNumber || '-'}
-                        </td>
-
-                        <td>
-                          <div className="client-action-buttons">
-                            <button
-                              type="button"
-                              className="table-edit-button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                selectClient(client)
-                              }}
-                            >
-                              수정
-                            </button>
-
-                            <button
-                              type="button"
-                              className="table-delete-button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                deleteClient(client.code)
-                              }}
-                            >
-                              삭제
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  )
-                )}
+                ))}
               </tbody>
             </table>
           </div>
         </div>
-
-        <div className="client-form-card">
-          <div className="client-form-header">
-            <span
-              className={`form-mode-badge ${
-                selectedCode ? 'edit' : 'create'
-              }`}
-            >
-              {selectedCode ? '수정 중' : '신규 등록'}
-            </span>
-            <h2>
-              {selectedCode
-                ? '거래처 수정'
-                : '새 거래처 등록'}
-            </h2>
-
-            <p>
-              {selectedCode
-                ? `${selectedCode} 거래처를 수정합니다.`
-                : `${currentTitle}를 새로 등록합니다.`}
-            </p>
-          </div>
-
+      </div>
+      {mode && (
+        <div className="client-modal-overlay">
+          <div ref={modalRef} className="client-modal" role="dialog" aria-modal="true"
+            aria-labelledby="client-modal-title" tabIndex={-1} onKeyDown={handleModalKeyDown}
+            inert={Boolean(confirmation)} aria-busy={busy}>
+            <div className="client-form-header">
+              <div>
+                <h2 id="client-modal-title">{mode === 'create' ? '새 거래처 등록' : mode === 'edit' ? '거래처 수정' : '거래처 상세'}</h2>
+                <p>{mode === 'create' ? `${currentTitle} 등록 후 계속해서 다음 거래처를 입력할 수 있습니다.` : `${currentTitle} · ${selectedCode}`}</p>
+              </div>
+              <button type="button" className="secondary-button" aria-label="거래처 창 닫기" disabled={busy} onClick={closeModal}>×</button>
+            </div>
+            {mode === 'detail' ? (
+              <dl className="client-detail-grid">
+                {clientFields.map(([key, label]) => (
+                  <div key={key} className={['name', 'businessAddress', 'actualAddress', 'homepage'].includes(key) ? 'client-form-full' : ''}>
+                    <dt>{label}</dt><dd>{selectedClient[key] || '-'}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <fieldset className="client-modal-fields" disabled={busy}>
           <div className="client-form-grid">
             <div className="form-field">
               <label>
@@ -487,6 +554,7 @@ function ClientManager() {
               </label>
 
               <input
+                ref={firstInputRef}
                 name="code"
                 value={form.code}
                 onChange={changeForm}
@@ -667,43 +735,25 @@ function ClientManager() {
             </span>
           </div>
 
-          {formError && (
-            <div className="form-error-message" role="alert">
-              {formError}
-            </div>
-          )}
-
-          <div className="client-form-actions">
-            {selectedCode ? (
-              <>
-                <button
-                  type="button"
-                  className="client-save-button"
-                  onClick={updateClient}
-                >
-                  수정 저장
-                </button>
-
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={resetForm}
-                >
-                  수정 취소
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="client-save-button"
-                onClick={addClient}
-              >
-                거래처 등록
-              </button>
+              </fieldset>
             )}
+            {formError && <div className="form-error-message" role="alert">{formError}</div>}
+            <div className="client-form-actions">
+              {mode === 'detail' && <button type="button" className="table-delete-button" disabled={busy} onClick={() => deleteClient(selectedCode)}>삭제</button>}
+              <div className="client-modal-primary-actions">
+                <button type="button" className="secondary-button" disabled={busy}
+                  onClick={() => mode === 'edit' ? selectClient(selectedClient, false) : closeModal()}>{mode === 'edit' ? '취소' : '닫기'}</button>
+                <button type="button" className="client-save-button" disabled={busy}
+                  onClick={() => {
+                    if (mode === 'detail') { setFormError(''); setMode('edit') }
+                    else if (mode === 'create') addClient()
+                    else updateClient()
+                  }}>{mode === 'detail' ? '수정' : mode === 'create' ? '등록' : '저장'}</button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

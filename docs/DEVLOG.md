@@ -1,5 +1,121 @@
 # 개발 기록
 
+## 2026-10-01 - 관리 Modal Sticky 제거 및 Enter/ESC 조작
+
+### 요청
+- 작업지시서 14-1에 따라 품목/거래처 Modal의 sticky header/action을 제거하고 Enter 저장·ESC 닫기를 적용.
+
+### 변경
+- Modal header/action의 sticky 위치, z-index, 음수 margin 및 padding 보정을 제거하고 일반 문서 흐름으로 복원. 기존 구분선·버튼 정렬·내부 스크롤과 작은 화면 wrap 유지.
+- sticky 전용 padding 변수를 제거하고 기존 24px/작은 화면 18px padding 복원.
+- 두 Modal의 단일 keydown handler에서 Escape, Enter, 기존 Tab focus trap을 처리.
+- create/edit의 일반 input/select에서 Enter 시 기존 등록/저장 함수 호출. IME 조합(isComposing/keyCode 229), 키 반복, busy/pendingRef, ConfirmDialog 상태를 확인하고 버튼·textarea 기본 동작은 유지.
+- create/detail/edit 모두 Escape로 기존 closeModal 호출. ConfirmDialog 표시 또는 CRUD 처리 중에는 부모 Modal 닫기를 차단.
+- 배경 .content 스크롤 잠금, 중복 실행 방지, 확장된 focus trap, 연속 등록과 기존 CRUD 흐름 유지. 신규 소스 파일 없음.
+
+### 검증 및 결과물
+- 변경 소스 diff를 읽어 CSS 제거 범위 및 키보드 모드·예외 조건 확인.
+- 앱 실행·테스트·빌드·lint·formatter·브라우저 확인은 공통 지침에 따라 미실행. 실제 IME/키보드 및 화면 동작은 실행 검증하지 않음.
+- 작업 시작/완료 시점의 기존 소스 3개 사본에 대한 git diff --no-index 출력만 docs/LAST_CHANGE.diff에 저장. before/after 경로로 표시되며 이전 미커밋 변경과 로그는 제외.
+
+---
+
+## 2026-10-01 - 품목/거래처 Modal 공통 UX 마감
+
+### 요청
+- 작업지시서 14에 따라 두 관리 Modal의 배경 스크롤, header/action 가시성, 중복 제출 및 키보드 접근성을 보완.
+
+### 변경
+- Modal 상태 클래스를 두 페이지에 부여하고 `.content:has(...)`에서만 overflow를 잠금. 닫힘/unmount 시 상태 선택자가 해제되어 원래 스크롤 규칙으로 복원되며 body 구조는 유지.
+- 두 Modal 내부 header/action을 흰색 불투명 배경과 경계선의 상·하단 sticky 영역으로 변경. padding 변수를 이용해 가장자리 정렬과 작은 화면 간격을 일치시킴.
+- 액션 wrap과 버튼 최소 높이를 적용하고 400px 이하에서는 주요 버튼 그룹을 별도 줄에 배치.
+- ItemManager의 등록·수정·삭제에 pendingRef 즉시 잠금 추가. 삭제 확인 취소를 포함한 모든 종료 경로에서 finally로 잠금·busy 해제.
+- 두 focus trap에 button/input/select/textarea/링크/tabindex 대상을 동일하게 적용하고 숨김·disabled·inert 및 음수 tabIndex 요소 제외. 확인창 종료 후 품목 Modal 포커스도 복구.
+- 기존 CRUD API, 필드, 목록 컬럼, 연속 등록, result.item/result.client 동기화 흐름 유지. 신규 소스 파일 없음.
+
+### 검증 및 결과물
+- 변경 소스 diff를 읽어 CSS 범위와 상태 잠금·해제 경로 확인.
+- 앱 실행·테스트·빌드·lint·formatter·브라우저 확인은 공통 지침에 따라 미실행. 실제 스크롤 및 키보드 동작은 실행 검증하지 않음.
+- 작업 시작/완료 시점의 기존 소스 3개 사본에 대한 git diff --no-index 출력만 docs/LAST_CHANGE.diff에 저장. before/after 경로로 표시되며 이전 미커밋 변경과 로그는 제외.
+
+---
+
+## 2026-10-01 - 거래처 관리 목록·상세 Modal 리디자인
+
+### 요청
+- 작업지시서 13에 따라 거래처 관리를 품목 관리와 동일한 목록·등록/상세/수정 Modal UX로 전환.
+
+### 변경
+- ClientManager의 상시 우측 폼과 행별 수정·삭제 버튼, 페이지 폼 자동 이동 코드를 제거하고 전체 폭 목록 및 행 클릭/키보드 상세 진입 적용.
+- 매출/매입 탭과 기존 검색을 유지. 탭 변경 시 검색·오류·Modal 상태를 초기화하고 이전 목록 요청의 지연 응답이 현재 탭을 덮어쓰지 않도록 처리.
+- 기존 14개 필드 전체를 읽기 전용 상세에 표시. 등록 성공 후 현재 유형과 Modal을 유지하고 빈 폼·코드 입력 포커스로 연속 등록 지원.
+- 기존 validation 및 CRUD API 유지. 수정 성공 시 result.client로 코드·폼·상세 동기화 후 상세 복귀, 수정 취소 시 저장 전 상세 복귀.
+- 기존 ConfirmDialog/useConfirmation/Toast 재사용. CRUD 오류는 Modal 내부, 목록 로딩 오류는 페이지에 표시. 삭제 성공 시 Modal 닫기 및 목록 갱신.
+- 거래처 전용 목록 가로 스크롤 제거, 세로 스크롤·sticky 헤더 유지. 1300/1500/1750px에서 구분·유형/사업자번호/주소를 순차 표시.
+- 품목 Modal과 동일한 크기·overlay·버튼 배치와 2열/1열 grid 적용. 포커스 이동·복원·trap, 확인창 포커스 충돌 및 중복 실행 방지 적용.
+- ClientManager.jsx와 main.css의 거래처 전용 부분만 변경. ItemManager 및 다른 화면·Main·Preload·IPC는 수정하지 않음. 신규 소스 파일 없음.
+
+### 검증 및 결과물
+- 변경 소스를 읽어 필드, 상태 전환, API 호출, 반응형 CSS 및 z-index 관계 확인.
+- 앱 실행·테스트·빌드·lint·formatter·브라우저 확인은 공통 지침에 따라 미실행. 실제 GUI 및 CRUD는 실행 검증하지 않음.
+- 작업 시작 시점의 두 소스 파일 사본과 완료본을 git diff --no-index로 비교한 출력만 docs/LAST_CHANGE.diff에 저장. before/after 경로로 표시되며 기존 미커밋 변경과 이전 품목 작업, 로그는 제외.
+
+---
+
+## 2026-10-01 - 품목 관리 목록·상세 Modal 리디자인
+
+### 요청
+- 작업지시서 12에 따라 품목 관리만 전체 폭 목록과 등록·상세·수정 Modal 구조로 전환.
+
+### 변경
+- ItemManager의 상시 우측 폼과 목록 수정·삭제 버튼, 좁은 화면 자동 스크롤 로직을 제거하고 행 클릭/키보드 선택으로 상세 Modal을 표시.
+- 모든 품목 정보를 상세에 표시하고, 등록 성공 시 Modal 유지·빈 폼 초기화·구분 재포커스로 연속 등록 지원.
+- 수정 시 기존 validation·재고 읽기전용 정책·코드 변경 API를 유지하고 result.item으로 동기화한 상세로 복귀. 수정 취소는 저장 전 상세로 복귀.
+- 삭제 확인은 기존 ConfirmDialog/useConfirmation 재사용. 성공은 Toast, 작업 실패는 Modal 내부 지속 오류, 목록 로딩 실패는 페이지 메시지로 분리.
+- 목록 가로 스크롤 제거, 세로 스크롤·sticky 헤더 유지. 1300/1500/1750px에서 단가/규격·단위/브랜드 컬럼을 순차 표시.
+- 2열/1열 반응형 Modal, 내부 스크롤, 포커스 이동 및 저장 중 버튼 비활성화 적용. 확인창·Toast보다 낮은 z-index 사용.
+- 기존 미커밋 변경을 보존하고 거래처·Main·Preload·IPC는 수정하지 않음. 신규 소스 파일 없음.
+
+### 검증 및 결과물
+- 변경 소스와 CSS를 읽어 상태 전환, API 호출, 필드 정책, 공통 스타일 재사용과 표시 순서를 확인.
+- 앱 실행·테스트·빌드·lint·formatter·브라우저 확인은 공통 지침에 따라 미실행. 실제 화면 및 CRUD 동작은 실행 검증하지 않음.
+- docs/LAST_CHANGE.diff에 수정한 기존 소스 두 파일의 git diff 출력 저장. 해당 파일의 기존 미커밋 변경도 일부 포함되며 로그와 타 파일은 제외.
+
+---
+
+## 2026-10-01 - 공통 페이지 헤더 Sticky 제거
+
+### 요청
+- 공통 페이지 헤더를 일반 콘텐츠 흐름으로 복원하고 내부 sticky 요소와의 시각적 겹침을 해소.
+
+### 변경
+- `.page-header`의 sticky 위치, z-index, negative margin 및 상단 padding 규칙을 제거.
+- 제목·설명·액션 버튼의 flex 배치를 유지하고 하단 간격을 `24px`로 복원.
+- `.transaction-summary-card`, `.item-form-card`, `.client-form-card`의 sticky offset을 `24px`로 조정.
+- 사이드바, `.content` 스크롤, 테이블 헤더 sticky 및 품목·거래처 자동 이동 코드는 유지.
+
+### 검증
+- 공통 지침에 따라 앱 실행, 테스트, 빌드, lint, formatter는 실행하지 않음.
+
+---
+
+## 2026-10-01 - 관리 화면 반응형·Sticky·폼 자동이동 통합 개선
+
+### 요청
+- 품목·거래처 관리 화면의 반응형 기준, sticky 페이지 헤더 배경, 좁은 화면 폼 자동 이동을 통일.
+
+### 변경
+- 거래처 관리 1열 breakpoint를 `1000px`에서 `1200px`로 통일하고 기존 목록 높이·폼 정적 배치를 유지.
+- `.content` padding을 CSS 변수로 관리하고 sticky `.page-header`가 상단 padding 영역까지 불투명하게 덮도록 보완.
+- 1200px 이하에서 신규 등록 버튼·목록 행 선택 시 폼 카드로 부드럽게 이동하고 품목 구분/거래처 코드 입력에 focus.
+- 폼 카드에 `scroll-margin-top`을 적용해 sticky 헤더에 가려지지 않도록 보정.
+- 기존 CRUD, Toast, 오류, 배지 및 검색 동작은 유지.
+
+### 검증
+- 공통 지침에 따라 앱 실행, 테스트, 빌드, lint, formatter는 실행하지 않음.
+
+---
+
 ## 2026-09-30 - 출고 마이너스 재고 사전 확인
 
 ### 요청
